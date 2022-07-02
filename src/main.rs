@@ -2,15 +2,21 @@ mod components;
 use bevy::{app::App, prelude::Commands, window::WindowDescriptor, DefaultPlugins};
 mod control;
 use bevy::prelude::*;
-mod entitys;
+mod entities;
 use control::Control;
 use control::ControlPlugin;
-use entitys::player::Player;
+use entities::player::Player;
+mod camera;
+mod physics;
+use camera::CameraPlugin;
+use physics::PhysicsPlugin;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugin(ControlPlugin())
+        .add_plugin(CameraPlugin())
+        .add_plugin(PhysicsPlugin())
         .add_startup_system(setup)
         .run();
 }
