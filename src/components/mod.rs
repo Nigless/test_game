@@ -1,4 +1,4 @@
 pub mod health;
 pub mod name;
-pub mod speed;
+pub mod physics;
 pub mod stamina;
