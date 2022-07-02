@@ -1,4 +1,4 @@
-use crate::components::speed::Speed;
+use crate::components::physics::Physics;
 use bevy::ecs::bundle::Bundle;
 use bevy::input::mouse::MouseMotion;
 use bevy::render::camera::Camera3d;
@@ -13,56 +13,35 @@ pub struct ControlPlugin();
 
 impl Plugin for ControlPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(Self::startup)
-            .add_system(Self::movement)
-            .add_system(Self::rotation);
+        app.add_system(Self::movement).add_system(Self::rotation);
     }
 }
 
 impl ControlPlugin {
-    fn startup(mut commands: Commands) {
-        commands
-            .spawn_bundle(PerspectiveCameraBundle {
-                perspective_projection: PerspectiveProjection {
-                    fov: PI * 0.4,
-                    ..default()
-                },
-                ..default()
-            })
-            .insert(Control());
-    }
-
     fn rotation(
-        mut camera: Query<&mut Transform, (With<Control>, With<Camera3d>)>,
-        mut entity: Query<&mut Transform, (With<Control>, With<Speed>, Without<Camera3d>)>,
+        mut entity: Query<&mut Transform, (With<Control>, With<Physics>)>,
         mut cursor: EventReader<MouseMotion>,
     ) {
         if let Err(_) = entity.get_single() {
             return;
         }
         let mut entity = entity.single_mut();
-        let mut camera = camera.single_mut();
 
         for event in cursor.iter() {
             entity.rotation = Quat::from_rotation_y(-(*event.delta).x * 0.002)
                 * entity.rotation
                 * Quat::from_rotation_x(-(*event.delta).y * 0.002)
         }
-
-        camera.rotation = entity.rotation
     }
 
     fn movement(
-        mut camera: Query<&mut Transform, (With<Control>, With<Camera3d>)>,
-        mut entity: Query<(&mut Transform, &Speed), (With<Control>, Without<Camera3d>)>,
+        mut entity: Query<(&mut Transform, &mut Physics), With<Control>>,
         keyboard: Res<Input<KeyCode>>,
-        time: Res<Time>,
     ) {
         if let Err(_) = entity.get_single() {
             return;
         }
-        let (mut entity, speed) = entity.single_mut();
-        let mut camera = camera.single_mut();
+        let (mut entity, mut physics) = entity.single_mut();
 
         let mut mov = Vec3::ZERO;
         if keyboard.pressed(KeyCode::D) {
@@ -87,9 +66,7 @@ impl ControlPlugin {
         }
 
         if mov != Vec3::ZERO {
-            entity.translation += mov.normalize() * f32::from(speed.value) * time.delta_seconds();
+            physics.mov(mov.normalize());
         }
-
-        camera.translation = entity.translation;
     }
 }
