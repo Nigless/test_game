@@ -68,8 +68,7 @@ impl ControlPlugin {
         if mov != Vec3::ZERO {
             physics.mov(mov.normalize());
         } else {
-            physics.impulse.x *= 0.9;
-            physics.impulse.z *= 0.9;
+            physics.impulse *= 0.9;
         }
     }
 }

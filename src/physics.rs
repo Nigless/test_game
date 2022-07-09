@@ -12,8 +12,12 @@ impl Plugin for PhysicsPlugin {
 impl PhysicsPlugin {
     fn movement(mut entity: Query<(&mut Transform, &mut Physics)>, time: Res<Time>) {
         for (mut transform, mut physics) in entity.iter_mut() {
-            physics.impulse += Vec3::new(0.0, -0.5, 0.0);
+            // physics.impulse += Vec3::new(0.0, -0.5, 0.0);
             transform.translation += physics.impulse * time.delta_seconds();
+            // if transform.translation.y < 0.0 {
+            //     transform.translation.y = 0.0;
+            //     physics.impulse.y = 0.0
+            // }
         }
     }
 }
