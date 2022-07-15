@@ -13,15 +13,38 @@ pub struct ControlPlugin();
 
 impl Plugin for ControlPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(Self::movement).add_system(Self::rotation);
+        app.add_startup_system(Self::startup)
+            .add_system(Self::movement)
+            .add_system(Self::rotation);
     }
 }
 
 impl ControlPlugin {
+    fn startup(mut windows: ResMut<Windows>) {
+        if let Some(window) = windows.get_primary_mut() {
+            window.set_cursor_visibility(false);
+
+            if !window.is_focused() {
+                return;
+            }
+
+            window.set_cursor_position(Vec2::new(window.width() / 2., window.height() / 2.));
+        }
+    }
+
     fn rotation(
         mut entity: Query<&mut Transform, (With<Control>, With<Physics>)>,
         mut cursor: EventReader<MouseMotion>,
+        mut windows: ResMut<Windows>,
     ) {
+        if let Some(window) = windows.get_primary_mut() {
+            if !window.is_focused() {
+                return;
+            }
+
+            window.set_cursor_position(Vec2::new(window.width() / 2., window.height() / 2.));
+        }
+
         if let Err(_) = entity.get_single() {
             return;
         }
