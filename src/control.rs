@@ -37,12 +37,12 @@ impl ControlPlugin {
         mut cursor: EventReader<MouseMotion>,
         mut windows: ResMut<Windows>,
     ) {
-        if let Some(window) = windows.get_primary_mut() {
-            if !window.is_focused() {
-                return;
-            }
-
-            window.set_cursor_position(Vec2::new(window.width() / 2., window.height() / 2.));
+        if let None = windows.get_primary_mut() {
+            return;
+        }
+        let window = windows.get_primary_mut().unwrap();
+        if !window.is_focused() {
+            return;
         }
 
         if let Err(_) = entity.get_single() {
@@ -53,8 +53,9 @@ impl ControlPlugin {
         for event in cursor.iter() {
             entity.rotation = Quat::from_rotation_y(-(*event.delta).x * 0.002)
                 * entity.rotation
-                * Quat::from_rotation_x(-(*event.delta).y * 0.002)
+                * Quat::from_rotation_x(-(*event.delta).y * 0.002);
         }
+        window.set_cursor_position(Vec2::new(window.width() / 2., window.height() / 2.));
     }
 
     fn movement(
