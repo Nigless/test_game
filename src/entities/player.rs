@@ -21,7 +21,7 @@ impl Player {
             health: Health::new(100),
             stamina: Stamina::new(100),
             name: Name::new(name),
-            physics: Physics::new(0),
+            physics: Physics::new(20),
             transform: Transform::default(),
         }
     }

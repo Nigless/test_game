@@ -90,9 +90,9 @@ impl ControlPlugin {
         }
 
         if mov != Vec3::ZERO {
-            physics.mov(mov.normalize());
+            physics.mov(mov.normalize() * 20.0);
         } else {
-            physics.impulse *= 0.9;
+            physics.mov(Vec3::ZERO);
         }
     }
 }
