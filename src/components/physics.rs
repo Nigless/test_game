@@ -16,10 +16,10 @@ impl Physics {
 
     pub fn mov(&mut self, vec: Vec3) {
         if self.mass == 0 {
-            self.impulse += vec - self.impulse;
+            self.impulse = vec;
 
             return;
         }
-        self.impulse += (vec - self.impulse) / self.mass as f32;
+        self.impulse = self.impulse + (vec - self.impulse) / self.mass as f32;
     }
 }

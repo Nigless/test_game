@@ -1,58 +1,49 @@
-use crate::components::physics::Physics;
-use bevy::{ecs::query, prelude::*};
-use noise::{Perlin, Seedable};
+use std::{collections::HashMap, f32::consts::PI};
 
-use super::chunk::Chunk;
-
-pub struct WorldPlugin();
-
-impl Plugin for WorldPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_startup_system(Self::startup);
-    }
+use super::{block::Block, chunk::Chunk, generator::Generator};
+pub struct World {
+    radius: usize,
+    pub grid: HashMap<[isize; 3], Box<Chunk>>,
 }
 
-impl WorldPlugin {
-    fn startup(
-        mut commands: Commands,
-        mut meshes: ResMut<Assets<Mesh>>,
-        mut materials: ResMut<Assets<StandardMaterial>>,
-    ) {
-        let noise = Perlin::new();
-        noise.set_seed(484);
+impl World {
+    pub fn new(radius: usize) -> Self {
+        let mut grid = HashMap::with_capacity(10 * 10 * 10);
+        let generator = Generator::new();
 
-        commands.spawn_bundle(PbrBundle {
-            mesh: meshes.add(Mesh::from(Chunk::new(&noise, 0, 0, 0))),
-            material: materials.add(StandardMaterial {
-                base_color: Color::GOLD,
-                reflectance: 0.0,
-                unlit: false,
-                ..Default::default()
-            }),
-            transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),
-            ..Default::default()
-        });
-        commands.spawn_bundle(PbrBundle {
-            mesh: meshes.add(Mesh::from(Chunk::new(&noise, 1, 0, 0))),
-            material: materials.add(StandardMaterial {
-                base_color: Color::GOLD,
-                reflectance: 0.0,
-                unlit: false,
-                ..Default::default()
-            }),
-            transform: Transform::from_translation(Vec3::new(32.0, 0.0, 0.0)),
-            ..Default::default()
-        });
-        commands.spawn_bundle(PbrBundle {
-            mesh: meshes.add(Mesh::from(Chunk::new(&noise, -1, 0, 0))),
-            material: materials.add(StandardMaterial {
-                base_color: Color::GOLD,
-                reflectance: 0.0,
-                unlit: false,
-                ..Default::default()
-            }),
-            transform: Transform::from_translation(Vec3::new(-32.0, 0.0, 0.0)),
-            ..Default::default()
-        });
+        for chunk_x in -2..2 {
+            for chunk_y in -2..2 {
+                for chunk_z in -2..2 {
+                    grid.insert(
+                        [chunk_x, chunk_y, chunk_z],
+                        Box::new(Chunk::new(&generator, chunk_x, chunk_y, chunk_z)),
+                    );
+                }
+            }
+        }
+        Self { radius, grid }
+    }
+
+    pub fn set_radius(&mut self, radius: usize) {
+        self.radius = radius
+    }
+
+    pub fn get_block(&self, x: isize, y: isize, z: isize) -> &Block {
+        self.grid
+            .get(&[
+                x / Chunk::SIZE as isize,
+                y / Chunk::SIZE as isize,
+                z / Chunk::SIZE as isize,
+            ])
+            .unwrap()
+            .get_block(
+                (Chunk::SIZE as isize - x % Chunk::SIZE as isize) as usize,
+                (Chunk::SIZE as isize - y % Chunk::SIZE as isize) as usize,
+                (Chunk::SIZE as isize - z % Chunk::SIZE as isize) as usize,
+            )
+    }
+
+    pub fn get_chunk(&self, chunk_x: isize, chunk_y: isize, chunk_z: isize) -> &Chunk {
+        self.grid.get(&[chunk_x, chunk_y, chunk_z]).unwrap()
     }
 }
