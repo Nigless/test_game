@@ -2,7 +2,7 @@ use noise::{NoiseFn, Perlin, Seedable};
 
 use super::block::Block;
 
-struct Generator {
+pub struct Generator {
     noise: Perlin,
 }
 
@@ -15,11 +15,11 @@ impl Generator {
     pub fn get(&self, x: isize, y: isize, z: isize) -> Block {
         if self
             .noise
-            .get([x as f64 * 0.027, y as f64 * 0.027, z as f64 * 0.027])
+            .get([x as f64 * 0.01, y as f64 * 0.01, z as f64 * 0.01])
             > 0.0
         {
-            return Block::new();
+            return Block { is_solid: true };
         }
-        Block::new()
+        Block::default()
     }
 }
