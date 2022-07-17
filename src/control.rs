@@ -51,9 +51,12 @@ impl ControlPlugin {
         let mut entity = entity.single_mut();
 
         for event in cursor.iter() {
-            entity.rotation = Quat::from_rotation_y(-(*event.delta).x * 0.002)
-                * entity.rotation
-                * Quat::from_rotation_x(-(*event.delta).y * 0.002);
+            let mut rotation = Quat::from_rotation_y(-(*event.delta).x * 0.002) * entity.rotation;
+            let rotate_x = rotation * Quat::from_rotation_x(-(*event.delta).y * 0.002);
+            if (rotate_x * Vec3::Y).y > 0.0 {
+                rotation = rotate_x
+            }
+            entity.rotation = rotation;
         }
         window.set_cursor_position(Vec2::new(window.width() / 2., window.height() / 2.));
     }
@@ -78,7 +81,7 @@ impl ControlPlugin {
         if keyboard.pressed(KeyCode::Space) {
             mov += Vec3::new(0.0, 1.0, 0.0);
         }
-        if keyboard.pressed(KeyCode::LShift) {
+        if keyboard.pressed(KeyCode::LControl) {
             mov += Vec3::new(0.0, -1.0, 0.0);
         }
 
@@ -90,9 +93,10 @@ impl ControlPlugin {
         }
 
         if mov != Vec3::ZERO {
-            physics.mov(mov.normalize() * 20.0);
-        } else {
-            physics.mov(Vec3::ZERO);
+            physics.mov(mov.normalize() * Vec3::new(20.0, 20.0, 20.0));
+            return;
         }
+
+        physics.mov(Vec3::ZERO)
     }
 }

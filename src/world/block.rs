@@ -1,4 +1,4 @@
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct Block {
     pub is_solid: bool,
 }
