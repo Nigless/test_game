@@ -1,4 +1,5 @@
 use crate::components::physics::Physics;
+use crate::entities::player::state::{Action, IState, State};
 use bevy::ecs::bundle::Bundle;
 use bevy::input::mouse::MouseMotion;
 use bevy::render::camera::Camera3d;
@@ -62,27 +63,48 @@ impl ControlPlugin {
     }
 
     fn movement(
-        mut entity: Query<(&mut Transform, &mut Physics), With<Control>>,
+        mut entity: Query<(&mut Transform, &mut Physics, &mut State), With<Control>>,
         keyboard: Res<Input<KeyCode>>,
     ) {
         if let Err(_) = entity.get_single() {
             return;
         }
-        let (mut entity, mut physics) = entity.single_mut();
+        let (entity, mut physics, mut state) = entity.single_mut();
 
         let mut mov = Vec3::ZERO;
+
+        if keyboard.pressed(KeyCode::Space) {
+            if !state.is_jumping() {
+                if state.is_ducking() {
+                    physics.impulse.y += 10.0
+                } else {
+                    physics.impulse.y += 15.0
+                }
+            }
+            state.dispatch(Action::JumpingOn)
+        }
+
+        if entity.translation.y <= 0.0 {
+            state.dispatch(Action::JumpingOff)
+        }
+
+        if keyboard.just_pressed(KeyCode::LControl) {
+            state.dispatch(Action::DuckingOn);
+
+            if state.is_push_down() {
+                physics.impulse.y = -30.0
+            }
+        }
+
+        if keyboard.just_released(KeyCode::LControl) {
+            state.dispatch(Action::DuckingOff)
+        }
+
         if keyboard.pressed(KeyCode::D) {
             mov += Vec3::new(entity.right().x, 0.0, entity.right().z).normalize();
         }
         if keyboard.pressed(KeyCode::A) {
             mov += Vec3::new(entity.left().x, 0.0, entity.left().z).normalize();
-        }
-
-        if keyboard.pressed(KeyCode::Space) {
-            mov += Vec3::new(0.0, 1.0, 0.0);
-        }
-        if keyboard.pressed(KeyCode::LControl) {
-            mov += Vec3::new(0.0, -1.0, 0.0);
         }
 
         if keyboard.pressed(KeyCode::S) {
@@ -92,11 +114,26 @@ impl ControlPlugin {
             mov += Vec3::new(entity.forward().x, 0.0, entity.forward().z).normalize();
         }
 
-        if mov != Vec3::ZERO {
-            physics.mov(mov.normalize() * Vec3::new(20.0, 20.0, 20.0));
+        if mov == Vec3::ZERO {
+            state.dispatch(Action::MovingOff);
+        } else {
+            let mut mov = mov.normalize();
+            if state.is_ducking() {
+                mov *= 5.0
+            } else {
+                mov *= 20.0
+            }
+
+            physics.mov_x(mov.x);
+            physics.mov_z(mov.z);
+
+            state.dispatch(Action::MovingOn);
             return;
         }
 
-        physics.mov(Vec3::ZERO)
+        if !state.is_jumping() {
+            physics.mov_x(0.0);
+            physics.mov_z(0.0);
+        }
     }
 }

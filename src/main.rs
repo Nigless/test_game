@@ -7,13 +7,11 @@ use bevy::prelude::*;
 mod entities;
 use control::Control;
 use control::ControlPlugin;
-use entities::player::Player;
+use entities::player::bundle::Player;
 mod camera;
 mod physics;
 use camera::CameraPlugin;
 use physics::PhysicsPlugin;
-use world::worldpl::WorldPlugin;
-mod world;
 
 fn main() {
     App::new()
@@ -38,8 +36,8 @@ fn setup(
     commands
         .spawn_bundle(Player::new("sanek".to_owned()))
         .insert(Control());
-    for x in 0..10 {
-        for z in 0..10 {
+    for x in -5..5 {
+        for z in -5..5 {
             commands.spawn_bundle(PbrBundle {
                 mesh: meshes.add(Mesh::from(Plane { size: 1.0 })),
 
@@ -50,9 +48,9 @@ fn setup(
                     ..Default::default()
                 }),
                 transform: Transform::from_translation(Vec3::new(
-                    x as f32 * 10.0,
+                    x as f32 * 5.0,
                     0.0,
-                    z as f32 * 10.0,
+                    z as f32 * 5.0,
                 )),
                 ..Default::default()
             });
