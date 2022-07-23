@@ -6,6 +6,8 @@ use bevy::ecs::bundle::Bundle;
 use bevy::prelude::Transform;
 use std::borrow::Borrow;
 
+use super::state::State;
+
 #[derive(Bundle)]
 pub struct Player {
     health: Health,
@@ -13,6 +15,7 @@ pub struct Player {
     name: Name,
     physics: Physics,
     transform: Transform,
+    state: State,
 }
 
 impl Player {
@@ -23,6 +26,7 @@ impl Player {
             name: Name::new(name),
             physics: Physics::new(5),
             transform: Transform::default(),
+            state: State::default(),
         }
     }
 }
