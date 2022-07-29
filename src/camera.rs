@@ -57,7 +57,7 @@ impl CameraPlugin {
         if let Some(target) = camera.target {
             if let Ok(component) = target_q.get_component::<Transform>(target) {
                 transform.translation = component.translation;
-                transform.translation.y += 1.5;
+                transform.translation.y += 0.8;
                 transform.rotation = component.rotation
             };
         };
