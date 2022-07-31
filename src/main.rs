@@ -1,14 +1,15 @@
 use crate::camera::CameraPlugin;
 use crate::control::ControlPlugin;
 use crate::physics::PhysicsPlugin;
-use crate::player::Player;
 use bevy::prelude::*;
 
 mod camera;
-mod character;
+mod components;
 mod control;
+mod entities;
 mod physics;
-mod player;
+use control::Control;
+use entities::player::Player;
 
 fn main() {
     App::new()
@@ -30,7 +31,9 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    commands.spawn_bundle(Player::new("sanek".to_owned()));
+    commands
+        .spawn_bundle(Player::new("sanek".to_owned()))
+        .insert(Control);
     for x in -5..5 {
         for z in -5..5 {
             commands.spawn_bundle(PbrBundle {

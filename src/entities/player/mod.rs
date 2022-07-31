@@ -1,7 +1,11 @@
-use crate::character::{Character, Health, Name, Stamina};
+pub mod moving;
+use crate::components::health::Health;
+use crate::components::name::Name;
+use crate::components::stamina::Stamina;
 use crate::control::Control;
 use crate::physics::Physics;
 use bevy::prelude::*;
+use moving::Moving;
 
 #[derive(Bundle)]
 pub struct Player {
@@ -10,8 +14,7 @@ pub struct Player {
     pub stamina: Stamina,
     pub physics: Physics,
     pub transform: Transform,
-    pub character: Character,
-    pub control: Control,
+    pub moving: Moving,
 }
 
 impl Player {
@@ -22,8 +25,7 @@ impl Player {
             name: Name::new(name),
             physics: Physics::new(5),
             transform: Transform::default(),
-            character: Character::default(),
-            control: Control,
+            moving: Moving::default(),
         }
     }
 }
