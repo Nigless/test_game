@@ -1,24 +1,21 @@
-mod components;
-use bevy::prelude::shape::Cube;
-use bevy::prelude::shape::Plane;
-use bevy::{app::App, prelude::Commands, window::WindowDescriptor, DefaultPlugins};
-mod control;
+use crate::camera::CameraPlugin;
+use crate::control::ControlPlugin;
+use crate::physics::PhysicsPlugin;
+use crate::player::Player;
 use bevy::prelude::*;
-mod entities;
-use control::Control;
-use control::ControlPlugin;
-use entities::player::bundle::Player;
+
 mod camera;
+mod character;
+mod control;
 mod physics;
-use camera::CameraPlugin;
-use physics::PhysicsPlugin;
+mod player;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugin(ControlPlugin())
-        .add_plugin(CameraPlugin())
-        .add_plugin(PhysicsPlugin())
+        .add_plugin(ControlPlugin)
+        .add_plugin(CameraPlugin)
+        .add_plugin(PhysicsPlugin)
         .add_startup_system(setup)
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
@@ -33,13 +30,11 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    commands
-        .spawn_bundle(Player::new("sanek".to_owned()))
-        .insert(Control());
+    commands.spawn_bundle(Player::new("sanek".to_owned()));
     for x in -5..5 {
         for z in -5..5 {
             commands.spawn_bundle(PbrBundle {
-                mesh: meshes.add(Mesh::from(Plane { size: 1.0 })),
+                mesh: meshes.add(Mesh::from(shape::Plane { size: 1.0 })),
 
                 material: materials.add(StandardMaterial {
                     base_color: Color::GREEN,
