@@ -1,4 +1,4 @@
-use crate::{character::Character, physics::Physics};
+use crate::{entities::player::moving::Moving, physics::Physics};
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 
@@ -51,13 +51,13 @@ fn rotation(
 }
 
 fn movement(
-    mut entity: Query<(&mut Transform, &mut Physics, &mut Character), With<Control>>,
+    mut entity: Query<(&mut Transform, &mut Physics, &mut Moving), With<Control>>,
     keyboard: Res<Input<KeyCode>>,
 ) {
     if let Err(_) = entity.get_single() {
         return;
     }
-    let (transform, mut physics, mut state) = entity.single_mut();
+    let (transform, mut physics, mut moving) = entity.single_mut();
 
     let mut mov = Vec3::ZERO;
 
@@ -68,58 +68,58 @@ fn movement(
     }
 
     if keyboard.just_pressed(KeyCode::LControl) {
-        state.ducking = true;
-        if transform.translation.y > 0.0 && physics.impulse.y < 10.0 && !state.pushing_down {
-            state.pushing_down = true;
+        moving.ducking = true;
+        if transform.translation.y > 0.0 && physics.impulse.y < 10.0 && !moving.pushing_down {
+            moving.pushing_down = true;
             physics.impulse.y -= 40.0;
         }
     }
 
     if keyboard.just_released(KeyCode::LControl) {
-        if state.sliding {
-            state.sliding = false
+        if moving.sliding {
+            moving.sliding = false
         }
-        state.ducking = false
+        moving.ducking = false
     }
 
     if keyboard.pressed(KeyCode::D) {
-        if !state.sliding {
+        if !moving.sliding {
             mov += Vec3::new(transform.right().x, 0.0, transform.right().z).normalize();
-            state.moving = true;
+            moving.moving = true;
         }
     }
     if keyboard.pressed(KeyCode::A) {
-        if !state.sliding {
+        if !moving.sliding {
             mov += Vec3::new(transform.left().x, 0.0, transform.left().z).normalize();
-            state.moving = true;
+            moving.moving = true;
         }
     }
 
     if keyboard.pressed(KeyCode::S) {
-        if !state.sliding {
+        if !moving.sliding {
             mov += Vec3::new(transform.back().x, 0.0, transform.back().z).normalize();
-            state.moving = true;
+            moving.moving = true;
         }
     }
 
     if keyboard.pressed(KeyCode::W) {
-        if state.sliding {
+        if moving.sliding {
             mov += Vec3::new(physics.impulse.x, 0.0, physics.impulse.z).normalize();
-        } else if state.ducking && transform.translation.y <= 0.0 {
-            state.sliding = true;
-            state.ducking = false;
+        } else if moving.ducking && transform.translation.y <= 0.0 {
+            moving.sliding = true;
+            moving.ducking = false;
             mov += Vec3::new(transform.forward().x, 0.0, transform.forward().z).normalize();
         } else {
             mov += Vec3::new(transform.forward().x, 0.0, transform.forward().z).normalize();
-            state.moving = true;
+            moving.moving = true;
         }
     }
 
     if mov == Vec3::ZERO {
-        state.moving = false;
-        if state.sliding {
-            state.sliding = false;
-            state.ducking = true;
+        moving.moving = false;
+        if moving.sliding {
+            moving.sliding = false;
+            moving.ducking = true;
         }
         if transform.translation.y <= 0.0 {
             physics.mov_x(0.0);
@@ -127,9 +127,9 @@ fn movement(
         }
     } else {
         let mut mov = mov.normalize();
-        if state.sliding {
+        if moving.sliding {
             mov *= 30.0
-        } else if state.ducking {
+        } else if moving.ducking {
             mov *= 5.0
         } else {
             mov *= 15.0
@@ -140,6 +140,6 @@ fn movement(
     }
 
     if transform.translation.y <= 0.0 {
-        state.pushing_down = false;
+        moving.pushing_down = false;
     }
 }
