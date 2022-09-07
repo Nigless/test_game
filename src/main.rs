@@ -1,13 +1,12 @@
 use crate::camera::CameraPlugin;
 use crate::control::ControlPlugin;
-use crate::physics::PhysicsPlugin;
 use bevy::prelude::*;
-
+use bevy::scene::*;
 mod camera;
 mod components;
 mod control;
 mod entities;
-mod physics;
+use bevy_rapier3d::prelude::*;
 use control::Control;
 use entities::player::Player;
 
@@ -16,7 +15,8 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(ControlPlugin)
         .add_plugin(CameraPlugin)
-        .add_plugin(PhysicsPlugin)
+        .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
+        .add_plugin(RapierDebugRenderPlugin::default())
         .add_startup_system(setup)
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
@@ -30,10 +30,19 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    server: Res<AssetServer>,
 ) {
     commands
-        .spawn_bundle(Player::new("sanek".to_owned()))
+        .spawn_bundle(Player::new("sanek".to_owned(), server))
         .insert(Control);
+
+    commands.spawn().insert(Collider::cuboid(500.0, 0.1, 500.0));
+
+    // commands.spawn_bundle(PbrBundle {
+    //     mesh: server.load("robot/model.glb#Node0"),
+    //     ..default()
+    // });
+
     for x in -5..5 {
         for z in -5..5 {
             commands.spawn_bundle(PbrBundle {
