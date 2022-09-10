@@ -1,4 +1,9 @@
-use crate::entities::player::moving::Moving;
+use std::f32::consts::PI;
+
+use crate::{
+    entities::player::moving::Moving,
+    head::{Head, WithHead},
+};
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{ExternalForce, ExternalImpulse, RigidBody, Velocity};
@@ -10,9 +15,9 @@ pub struct ControlPlugin;
 
 impl Plugin for ControlPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(startup)
-            .add_system(movement)
-            .add_system(rotation);
+        app.add_system(movement)
+            .add_system(rotation)
+            .add_system(head_rotation);
     }
 }
 
@@ -23,7 +28,7 @@ fn startup(mut windows: ResMut<Windows>) {
 }
 
 fn rotation(
-    mut entity: Query<&mut Transform, With<Control>>,
+    mut entity: Query<&mut Transform, (With<Control>, Without<WithHead>, Without<Head>)>,
     mut cursor: EventReader<MouseMotion>,
     mut windows: ResMut<Windows>,
 ) {
@@ -48,7 +53,41 @@ fn rotation(
         }
         entity.rotation = rotation;
     }
-    window.set_cursor_position(Vec2::new(window.width() / 2., window.height() / 2.));
+    // window.set_cursor_position(Vec2::new(window.width() / 2., window.height() / 2.));
+}
+
+fn head_rotation(
+    mut entity_q: Query<(&mut Transform, &Head), With<Control>>,
+    mut transform_q: Query<&mut Transform, (Without<Head>, Without<Control>)>,
+    mut cursor: EventReader<MouseMotion>,
+    mut windows: ResMut<Windows>,
+) {
+    if let None = windows.get_primary_mut() {
+        return;
+    }
+    let window = windows.get_primary_mut().unwrap();
+    if !window.is_focused() {
+        return;
+    }
+
+    if let Err(_) = entity_q.get_single() {
+        return;
+    }
+    let (mut entity_tfm, entity_head) = entity_q.get_single_mut().unwrap();
+
+    for event in cursor.iter() {
+        let rotation = Quat::from_rotation_y(-(event.delta).x * 0.002) * entity_tfm.rotation;
+        entity_tfm.rotation = rotation;
+
+        let mut head_tfm = transform_q.get_mut(entity_head.target).unwrap();
+
+        let rotation = head_tfm.rotation * Quat::from_rotation_x(-(event.delta).y * 0.002);
+        if (rotation * Vec3::Y).y > 0.0 {
+            head_tfm.rotation = rotation;
+        }
+    }
+
+    // window.set_cursor_position(Vec2::new(window.width() / 2., window.height() / 2.));
 }
 
 fn movement(
