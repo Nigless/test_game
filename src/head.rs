@@ -1,9 +1,5 @@
-use core::panic;
-use std::process::Child;
-
 use bevy::{
     core::Name,
-    ecs::world::{self, WorldBorrow},
     hierarchy::Children,
     prelude::{App, Commands, Component, Entity, Plugin, Query, With, World},
 };
