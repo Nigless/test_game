@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use smallstr::SmallString;
 
 #[derive(Component, Default)]
 pub struct Moving {

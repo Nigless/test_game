@@ -2,6 +2,8 @@ use crate::camera::CameraPlugin;
 use crate::control::ControlPlugin;
 use bevy::prelude::*;
 use bevy::render::mesh::skinning::SkinnedMesh;
+use bevy::render::settings::Backends;
+use bevy::render::settings::WgpuSettings;
 use bevy::scene::*;
 use bevy_editor_pls::prelude::*;
 mod camera;
@@ -9,11 +11,13 @@ mod components;
 mod control;
 mod entities;
 mod head;
+mod model;
 use bevy_rapier3d::prelude::*;
 use camera::CameraTarget;
 use control::Control;
 use entities::player::Player;
 use head::HeadPlugin;
+use model::ModelPlugin;
 
 fn main() {
     App::new()
@@ -24,23 +28,24 @@ fn main() {
         .add_plugin(RapierDebugRenderPlugin::default())
         .add_plugin(EditorPlugin)
         .add_plugin(HeadPlugin)
-        .add_startup_system(setup)
+        .add_plugin(ModelPlugin)
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
             brightness: 0.9,
         })
         .insert_resource(ClearColor(Color::rgb(0.8, 0.8, 0.8)))
+        .add_startup_system(startup)
         .run();
 }
 
-fn setup(
+fn startup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     server: Res<AssetServer>,
 ) {
     commands
-        .spawn_bundle(Player::new(server))
+        .spawn_bundle(Player::new())
         .insert(Control)
         .insert(CameraTarget);
 
