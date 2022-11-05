@@ -1,12 +1,8 @@
-use std::f32::consts::PI;
-
-use crate::{
-    entities::player::moving::Moving,
-    head::{Head, WithHead},
-};
+use crate::head::{Head, WithHead};
+use crate::step::Step;
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::{ExternalForce, ExternalImpulse, RigidBody, Velocity};
+use bevy_rapier3d::prelude::Velocity;
 
 #[derive(Component)]
 pub struct Control;
@@ -15,9 +11,9 @@ pub struct ControlPlugin;
 
 impl Plugin for ControlPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(movement)
-            .add_system(rotation)
-            .add_system(head_rotation);
+        app.add_system(movement.before(Step::CAMERA))
+            .add_system(rotation.before(Step::CAMERA))
+            .add_system(head_rotation.before(Step::CAMERA));
     }
 }
 
