@@ -1,9 +1,10 @@
-use crate::{control::Control, head::Head};
+use crate::head::Head;
+use crate::step::Step;
 use bevy::{prelude::*, render::camera::Projection};
 use std::f32::consts::PI;
 
 #[derive(Component)]
-struct Camera;
+pub struct Camera;
 
 #[derive(Component)]
 pub struct CameraTarget;
@@ -13,8 +14,8 @@ pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(startup)
-            .add_system(follow)
-            .add_system(follow_head);
+            .add_system(follow.label(Step::CAMERA))
+            .add_system(follow_head.label(Step::CAMERA));
     }
 }
 
