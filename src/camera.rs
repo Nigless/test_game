@@ -1,5 +1,6 @@
 use crate::head::Head;
-use crate::step::Step;
+use bevy_rapier3d::prelude::*;
+
 use bevy::{prelude::*, render::camera::Projection};
 use std::f32::consts::PI;
 
@@ -9,13 +10,20 @@ pub struct Camera;
 #[derive(Component)]
 pub struct CameraTarget;
 
+#[derive(StageLabel)]
+pub struct CameraStage;
+
 pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(startup)
-            .add_system(follow.label(Step::CAMERA))
-            .add_system(follow_head.label(Step::CAMERA));
+        app.add_startup_system(startup).add_stage_after(
+            PhysicsStages::Writeback,
+            CameraStage,
+            SystemStage::parallel()
+                .with_system(follow)
+                .with_system(follow_head),
+        );
     }
 }
 
@@ -34,12 +42,12 @@ fn startup(mut commands: Commands) {
 
 fn follow(
     mut camera_q: Query<&mut Transform, With<Camera>>,
-    mut target_q: Query<&Transform, (With<CameraTarget>, Without<Camera>, Without<Head>)>,
+    mut target_q: Query<&GlobalTransform, (With<CameraTarget>, Without<Camera>, Without<Head>)>,
 ) {
     if let Err(_) = target_q.get_single() {
         return;
     }
-    let target_t = target_q.single_mut();
+    let target_t = target_q.single_mut().compute_transform();
 
     let mut camera_t = camera_q.single_mut();
 
@@ -50,7 +58,10 @@ fn follow(
 fn follow_head(
     mut camera_q: Query<&mut Transform, With<Camera>>,
     mut target_q: Query<&Head, (With<CameraTarget>, Without<Camera>)>,
-    mut transform_q: Query<&GlobalTransform, (Without<Head>, Without<Camera>)>,
+    mut transform_q: Query<
+        &GlobalTransform,
+        (Without<Head>, Without<CameraTarget>, Without<Camera>),
+    >,
 ) {
     if let Err(_) = target_q.get_single() {
         return;
