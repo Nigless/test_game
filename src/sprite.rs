@@ -1,5 +1,4 @@
 use crate::camera::Camera;
-use crate::step::Step;
 use bevy::prelude::*;
 
 #[derive(Component)]
@@ -22,8 +21,7 @@ pub struct SpritePlugin;
 
 impl Plugin for SpritePlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(resolve)
-            .add_system(rotate.after(Step::CAMERA));
+        app.add_system(resolve).add_system(rotate);
     }
 }
 
