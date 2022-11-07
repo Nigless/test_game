@@ -1,3 +1,4 @@
+use bevy::prelude::*;
 use bevy::{
     core::Name,
     hierarchy::Children,
@@ -23,7 +24,7 @@ pub struct HeadPlugin;
 
 impl Plugin for HeadPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(resolve);
+        app.add_system_to_stage(CoreStage::PreUpdate, resolve);
     }
 }
 
