@@ -52,6 +52,17 @@ fn startup(
 
     commands.spawn().insert(Collider::cuboid(500.0, 0.1, 500.0));
 
+    commands.spawn_bundle(Bullet::new());
+    // commands
+    //     .spawn()
+    //     .insert(Velocity::default())
+    //     .insert(GlobalTransform::default())
+    //     .insert(Transform::from_xyz(0.0, 1.0, 0.0))
+    //     .insert(Control)
+    //     .insert(CameraTarget)
+    //     .insert(RigidBody::Dynamic)
+    //     .insert(Collider::cuboid(0.3, 0.3, 0.3));
+
     for x in -5..5 {
         for z in -5..5 {
             commands.spawn_bundle(PbrBundle {
