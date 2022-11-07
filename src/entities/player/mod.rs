@@ -1,8 +1,8 @@
 pub mod moving;
-use super::utils::bnd_collider::BndCollider;
-use super::utils::bnd_model::BndModel;
-use super::utils::bnd_transform::BndTransform;
 use crate::head::WithHead;
+use crate::utils::bnd_collider::BndCollider;
+use crate::utils::bnd_model::BndModel;
+use crate::utils::bnd_transform::BndTransform;
 use bevy_rapier3d::prelude::Collider;
 
 use bevy::prelude::*;
