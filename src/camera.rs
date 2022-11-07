@@ -1,5 +1,5 @@
 use crate::head::Head;
-use bevy::{prelude::*, render::camera::Projection};
+use bevy::{prelude::*, render::camera::Projection, transform::TransformSystem};
 use std::f32::consts::PI;
 
 #[derive(Component)]
@@ -12,9 +12,10 @@ pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(startup)
-            .add_system(follow)
-            .add_system(follow_head);
+        app.add_startup_system(startup).add_system_to_stage(
+            CoreStage::PostUpdate,
+            follow.after(TransformSystem::TransformPropagate),
+        );
     }
 }
 
@@ -33,36 +34,20 @@ fn startup(mut commands: Commands) {
 
 fn follow(
     mut camera_q: Query<&mut Transform, With<Camera>>,
-    mut target_q: Query<&Transform, (With<CameraTarget>, Without<Camera>, Without<Head>)>,
+    target_q: Query<(&Transform, Option<&Head>), (With<CameraTarget>, Without<Camera>)>,
+    transform_q: Query<&GlobalTransform, (Without<Head>, Without<Camera>)>,
 ) {
-    if let Err(_) = target_q.get_single() {
-        return;
-    }
-    let target_t = target_q.single_mut();
-
-    let mut camera_t = camera_q.single_mut();
-
-    camera_t.translation = target_t.translation;
-    camera_t.rotation = target_t.rotation;
-}
-
-fn follow_head(
-    mut camera_q: Query<&mut Transform, With<Camera>>,
-    mut target_q: Query<&Head, (With<CameraTarget>, Without<Camera>)>,
-    mut transform_q: Query<&GlobalTransform, (Without<Head>, Without<Camera>)>,
-) {
-    if let Err(_) = target_q.get_single() {
-        return;
-    }
-    let entity_head = target_q.single_mut();
-
-    let head_tfm = transform_q
-        .get_mut(entity_head.target)
-        .unwrap()
-        .compute_transform();
-
     let mut camera_tfm = camera_q.single_mut();
+    let (target_tfm, target_head) = match target_q.get_single() {
+        Ok(e) => e,
+        Err(_) => return,
+    };
 
-    camera_tfm.translation = head_tfm.translation;
-    camera_tfm.rotation = head_tfm.rotation;
+    let target_tfm = match target_head {
+        Some(e) => transform_q.get(e.target).unwrap().compute_transform(),
+        None => *target_tfm,
+    };
+
+    camera_tfm.translation = target_tfm.translation;
+    camera_tfm.rotation = target_tfm.rotation;
 }
