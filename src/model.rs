@@ -20,7 +20,7 @@ pub struct ModelPlugin;
 
 impl Plugin for ModelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(resolve);
+        app.add_system_to_stage(CoreStage::PreUpdate, resolve);
     }
 }
 
