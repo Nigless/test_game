@@ -12,6 +12,7 @@ mod control;
 mod entities;
 mod head;
 mod model;
+mod sprite;
 use bevy_rapier3d::prelude::*;
 use camera::CameraTarget;
 use control::Control;
