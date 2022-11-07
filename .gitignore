@@ -24,3 +24,4 @@ Cargo.lock
 
 assets/**/*.blend1
 assets/**/uv_layout.png
+trace-*.json
