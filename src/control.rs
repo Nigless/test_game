@@ -1,12 +1,7 @@
-use std::f32::consts::PI;
-
-use crate::{
-    entities::player::moving::Moving,
-    head::{Head, WithHead},
-};
+use crate::head::{Head, WithHead};
 use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::{ExternalForce, ExternalImpulse, RigidBody, Velocity};
+use bevy_rapier3d::prelude::Velocity;
 
 #[derive(Component)]
 pub struct Control;
@@ -15,7 +10,9 @@ pub struct ControlPlugin;
 
 impl Plugin for ControlPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(movement)
+        app
+        // .add_startup_system(startup)
+            .add_system(movement)
             .add_system(rotation)
             .add_system(head_rotation);
     }
@@ -116,10 +113,5 @@ fn movement(
         mov += Vec3::new(transform.forward().x, 0.0, transform.forward().z).normalize();
     }
 
-    if mov == Vec3::ZERO {
-        velocity.linvel = Vec3::ZERO;
-        return;
-    }
-
-    velocity.linvel = mov.normalize() * 20.0;
+    velocity.linvel = mov.normalize_or_zero() * 20.0;
 }
