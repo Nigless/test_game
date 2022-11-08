@@ -1,5 +1,6 @@
 use crate::head::Head;
-use bevy::{prelude::*, render::camera::Projection, transform::TransformSystem};
+use bevy::transform::transform_propagate_system;
+use bevy::{prelude::*, render::camera::Projection};
 use std::f32::consts::PI;
 
 #[derive(Component)]
@@ -8,13 +9,19 @@ pub struct Camera;
 #[derive(Component)]
 pub struct CameraTarget;
 
+#[derive(StageLabel)]
+pub struct CameraStage;
+
 pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(startup).add_system_to_stage(
+        app.add_startup_system(startup).add_stage_before(
             CoreStage::PostUpdate,
-            follow.after(TransformSystem::TransformPropagate),
+            CameraStage,
+            SystemStage::parallel()
+                .with_system(transform_propagate_system)
+                .with_system(follow.after(transform_propagate_system)),
         );
     }
 }
@@ -26,7 +33,6 @@ fn startup(mut commands: Commands) {
                 fov: PI * 0.4,
                 ..default()
             }),
-            transform: Transform::from_xyz(0.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         })
         .insert(Camera);

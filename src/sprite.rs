@@ -1,15 +1,18 @@
 use crate::camera::Camera;
 use bevy::prelude::*;
+use bevy::transform::TransformSystem;
 
 #[derive(Component)]
 pub struct WithSprite {
     pub src: String,
+    pub size: f32,
 }
 
 impl WithSprite {
-    pub fn new<'a>(src: &'a str) -> Self {
+    pub fn new<'a>(src: &'a str, size: f32) -> Self {
         Self {
             src: src.to_owned(),
+            size,
         }
     }
 }
@@ -25,7 +28,10 @@ pub struct SpritePlugin;
 impl Plugin for SpritePlugin {
     fn build(&self, app: &mut App) {
         app.add_system_to_stage(CoreStage::PreUpdate, resolve)
-            .add_system(rotate);
+            .add_system_to_stage(
+                CoreStage::PostUpdate,
+                rotate.before(TransformSystem::TransformPropagate),
+            );
     }
 }
 
@@ -56,7 +62,7 @@ fn resolve(
                     ..Default::default()
                 }),
                 meshes.add(Mesh::from(shape::Quad {
-                    size: Vec2::new(1.0, 1.0),
+                    size: Vec2::new(sprite.size * 2.0, sprite.size * 2.0),
                     flip: false,
                 })),
             ))
