@@ -28,7 +28,7 @@ impl Player {
             head: WithHead,
             moving: Moving::default(),
             locked_axes: LockedAxes::ROTATION_LOCKED,
-            transform: BndTransform::new(0.0, 2.0, 0.0),
+            transform: BndTransform::new(0.0, 1.0, 0.0),
             collider: BndCollider::new(Collider::cylinder(0.95, 0.2)),
             model: BndModel::new("robot/model.glb#Scene0"),
         }
