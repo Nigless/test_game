@@ -6,6 +6,7 @@ use bevy::render::settings::Backends;
 use bevy::render::settings::WgpuSettings;
 use bevy::scene::*;
 use bevy_editor_pls::prelude::*;
+use bevy_rapier3d::prelude::RigidBody;
 mod camera;
 mod components;
 mod control;
@@ -51,7 +52,8 @@ fn startup(
     commands
         .spawn_bundle(Player::new())
         .insert(Control)
-        .insert(CameraTarget);
+        .insert(CameraTarget)
+        .insert(Visibility { is_visible: false });
 
     commands.spawn().insert(Collider::cuboid(500.0, 0.1, 500.0));
 
