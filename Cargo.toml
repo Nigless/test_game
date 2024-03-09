@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = "0.8.1"
+bevy = "0.13.0"
 smallstr = "0.3.0"
 bevy_rapier3d = "*"
-bevy_editor_pls = "*"
 regex = "1.6.0"
+bevy-inspector-egui = "0.23.3"

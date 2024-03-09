@@ -2,13 +2,13 @@ use crate::model::WithModel;
 use bevy::prelude::*;
 
 #[derive(Bundle)]
-pub struct BndModel {
+pub struct ModelBundle {
     model: WithModel,
     visibility: Visibility,
-    computed_visibility: ComputedVisibility,
+    computed_visibility: InheritedVisibility,
 }
 
-impl BndModel {
+impl ModelBundle {
     pub fn new(src: &str) -> Self {
         Self {
             model: WithModel::new(src),
