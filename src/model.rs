@@ -20,7 +20,7 @@ pub struct ModelPlugin;
 
 impl Plugin for ModelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_to_stage(CoreStage::PreUpdate, resolve);
+        app.add_systems(PreUpdate, resolve);
     }
 }
 
@@ -30,10 +30,12 @@ fn resolve(
     models_q: Query<(Entity, &WithModel)>,
 ) {
     for (entity, model) in models_q.iter() {
+        let src = model.src.clone();
+
         commands
             .entity(entity)
             .remove::<WithModel>()
             .insert(Model)
-            .insert(server.load::<Scene, &str>(model.src.as_str()));
+            .insert(server.load::<Scene>(src));
     }
 }

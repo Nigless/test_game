@@ -1,2 +1,2 @@
-pub mod bullet;
-pub mod player;
+pub mod ghost;
+pub mod package;
