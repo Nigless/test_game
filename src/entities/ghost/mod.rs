@@ -1,11 +1,8 @@
-use std::f32::consts::PI;
+use std::f32::consts;
 
-use crate::control::Controls;
-use crate::utils::collider_bundle::ColliderBundle;
-use bevy::asset::VisitAssetDependencies;
-use bevy::render::render_resource::encase::vector;
-use bevy::scene::ron::value;
-use bevy::ui::update;
+use crate::bindings::{Bindings, Control};
+use crate::camera_controller::{self, CameraController};
+
 use bevy::{ecs::reflect, input::mouse::MouseMotion};
 use bevy_rapier3d::control::{
     self, CharacterLength, KinematicCharacterController, KinematicCharacterControllerOutput,
@@ -16,10 +13,19 @@ use bevy_rapier3d::pipeline::QueryFilter;
 use bevy_rapier3d::plugin::RapierContext;
 use bevy_rapier3d::prelude::Collider;
 
-use bevy::prelude::*;
+use bevy::{prelude::*, transform};
 use bevy_rapier3d::prelude::LockedAxes;
 use bevy_rapier3d::rapier::geometry::ColliderSet;
 use bevy_rapier3d::rapier::pipeline::QueryPipeline;
+
+#[derive(Resource, Default)]
+struct Input {
+    pub moving: Vec2,
+    pub looking: Vec2,
+    pub jumping: bool,
+    pub running: bool,
+    pub crouching: bool,
+}
 
 #[derive(Component)]
 struct Unresolved;
@@ -73,6 +79,7 @@ impl Default for Characteristics {
 #[derive(Bundle)]
 pub struct Ghost {
     unresolved: Unresolved,
+    name: Name,
     state: State,
     characteristics: Characteristics,
     transform: TransformBundle,
@@ -85,6 +92,7 @@ impl Ghost {
     pub fn new() -> Self {
         Self {
             unresolved: Unresolved,
+            name: Name::new("Ghost"),
             state: State::default(),
             characteristics: Characteristics::default(),
             transform: TransformBundle::default(),
@@ -99,25 +107,38 @@ pub struct GhostPlugin;
 
 impl Plugin for GhostPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<State>()
+        app.insert_resource(Input::default())
+            .register_type::<State>()
             .register_type::<Characteristics>()
+            .add_systems(Startup, resolve)
+            .add_systems(First, resolve)
             .add_systems(
-                PreUpdate,
+                Update,
                 (
-                    resolve.before(look_around),
-                    look_around.before(walk),
-                    walk.before(apply_physics),
-                    apply_physics,
+                    update_input.before(look_around).before(walk),
+                    look_around
+                        .before(update_state)
+                        .run_if(resource_changed::<Input>),
+                    walk.before(update_state).run_if(resource_changed::<Input>),
+                    update_state,
                 ),
             );
     }
 }
 
-fn resolve(entity_q: Query<Entity, With<Unresolved>>, mut commands: Commands) {
-    for entity in entity_q.iter() {
+fn resolve(mut entity_q: Query<Entity, With<Unresolved>>, mut commands: Commands) {
+    let projection = Projection::Perspective(PerspectiveProjection {
+        fov: consts::PI / 2.0,
+        ..default()
+    });
+
+    let transform = Transform::from_xyz(0.0, 1.8 - 0.2, 0.0);
+
+    for entity in entity_q.iter_mut() {
         let camera = commands
             .spawn(Camera3dBundle {
-                transform: Transform::from_xyz(0.0, 1.8 - 0.2, 0.0),
+                transform,
+                projection: projection.clone(),
                 ..default()
             })
             .id();
@@ -125,55 +146,77 @@ fn resolve(entity_q: Query<Entity, With<Unresolved>>, mut commands: Commands) {
         commands
             .entity(entity)
             .remove::<Unresolved>()
+            .insert(CameraController { target: camera })
             .add_child(camera);
     }
 }
 
-fn look_around(
+fn update_input(
     mut mouse: EventReader<MouseMotion>,
-    mut character_q: Query<(&mut Transform, &State), Without<Unresolved>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    controls: Res<Bindings>,
+    mut input: ResMut<Input>,
+    entity_q: Query<&Control>,
 ) {
-    let mut rotation = Vec2::ZERO;
-
-    for event in mouse.read().into_iter() {
-        rotation += Vec2::new(event.delta.x, event.delta.y);
+    if entity_q.is_empty() {
+        return;
     }
 
-    for (mut transform, state) in character_q.iter_mut() {
-        transform.rotation *= Quat::from_rotation_y(-rotation.x * 0.002);
+    input.looking = Vec2::ZERO;
+
+    for event in mouse.read().into_iter() {
+        input.looking += Vec2::new(-event.delta.x, -event.delta.y);
+    }
+
+    input.moving = Vec2::ZERO;
+
+    if keyboard.pressed(controls.move_left) {
+        input.moving += Vec2::new(-1.0, 0.0);
+    }
+
+    if keyboard.pressed(controls.move_right) {
+        input.moving += Vec2::new(1.0, 0.0);
+    }
+
+    if keyboard.pressed(controls.move_forward) {
+        input.moving += Vec2::new(0.0, -1.0);
+    }
+
+    if keyboard.pressed(controls.move_backward) {
+        input.moving += Vec2::new(0.0, 1.0);
+    }
+
+    input.jumping = keyboard.just_pressed(controls.jump);
+    input.running = keyboard.pressed(controls.run);
+    input.crouching = keyboard.pressed(controls.crouch);
+}
+
+fn look_around(
+    input: Res<Input>,
+    mut entity_q: Query<
+        (&mut Transform, &CameraController, &State),
+        (Without<Unresolved>, With<Control>),
+    >,
+    mut camera_q: Query<&mut Transform, (With<Camera>, Without<CameraController>)>,
+) {
+    for (mut entity_transform, controller, state) in entity_q.iter_mut() {
+        let mut camera_transform = camera_q
+            .get_mut(controller.target)
+            .expect("CameraController target doesn't exist or doesn't have a Camera component");
+
+        camera_transform.rotation *= Quat::from_rotation_x(input.looking.y * 0.002);
+        entity_transform.rotation *= Quat::from_rotation_y(input.looking.x * 0.002);
     }
 }
 
 fn walk(
     time: Res<Time>,
-    controls: Res<Controls>,
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut character_q: Query<(&mut Velocity, &mut Transform, &State, &Characteristics)>,
+    input: Res<Input>,
+    mut entity_q: Query<(&mut Velocity, &mut Transform, &State, &Characteristics), With<Control>>,
 ) {
-    let mut direction = Vec2::ZERO;
-
-    if keyboard.pressed(controls.move_left) {
-        direction += Vec2::new(-1.0, 0.0);
-    }
-
-    if keyboard.pressed(controls.move_right) {
-        direction += Vec2::new(1.0, 0.0);
-    }
-
-    if keyboard.pressed(controls.move_forward) {
-        direction += Vec2::new(0.0, -1.0);
-    }
-
-    if keyboard.pressed(controls.move_backward) {
-        direction += Vec2::new(0.0, 1.0);
-    }
-
-    let jumping = keyboard.just_pressed(controls.jump);
-    let running = keyboard.pressed(controls.run);
-
-    for (mut velocity, mut transform, state, characteristics) in character_q.iter_mut() {
+    for (mut velocity, mut transform, state, characteristics) in entity_q.iter_mut() {
         let speed = if state.standing || state.moving {
-            if running {
+            if input.running {
                 characteristics.running_speed
             } else {
                 characteristics.walking_speed
@@ -188,7 +231,7 @@ fn walk(
 
         let direction = transform
             .rotation
-            .mul_vec3(Vec3::new(direction.x, 0.0, direction.y))
+            .mul_vec3(Vec3::new(input.moving.x, 0.0, input.moving.y))
             .normalize_or_zero();
 
         velocity.linvel = velocity.linvel.lerp(
@@ -196,29 +239,28 @@ fn walk(
             characteristics.acceleration * time.delta_seconds(),
         );
 
-        if jumping && (state.standing || state.moving || state.crouching) {
+        if input.jumping && (state.standing || state.moving || state.crouching) {
             velocity.linvel.y += characteristics.jumping_high
         }
     }
 }
 
-fn apply_physics(
+fn update_state(
     time: Res<Time>,
     rapier: Res<RapierContext>,
-    mut character_q: Query<(
+    mut entity_q: Query<(
         Entity,
         &mut State,
         &mut Velocity,
-        &Collider,
         &mut Transform,
+        &Collider,
         &GravityScale,
     )>,
 ) {
-    for (entity, mut state, mut velocity, collider, mut transform, gravity) in
-        character_q.iter_mut()
-    {
-        let gravity = -9.81 * gravity.0;
-        velocity.linvel.y = velocity.linvel.y.lerp(gravity, time.delta_seconds());
+    for (entity, mut state, mut velocity, mut transform, collider, gravity) in entity_q.iter_mut() {
+        let gravity = 9.81 * gravity.0 * time.delta_seconds();
+
+        velocity.linvel.y -= gravity;
 
         let collision = match rapier.cast_shape(
             transform.translation,
@@ -251,7 +293,7 @@ fn apply_physics(
         if let Some(normal) = collision {
             velocity.linvel = velocity.linvel - velocity.linvel.project_onto(normal);
 
-            if normal.angle_between(Vec3::Y) < PI / 4.0 {
+            if normal.angle_between(Vec3::Y) < consts::PI / 4.0 {
                 grounded = true
             }
         };

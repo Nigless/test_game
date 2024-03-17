@@ -1,9 +1,9 @@
-use crate::model::WithModel;
+use crate::model::Model;
 use bevy::prelude::*;
 
 #[derive(Bundle)]
 pub struct ModelBundle {
-    model: WithModel,
+    model: Model,
     visibility: Visibility,
     computed_visibility: InheritedVisibility,
 }
@@ -11,7 +11,7 @@ pub struct ModelBundle {
 impl ModelBundle {
     pub fn new(src: &str) -> Self {
         Self {
-            model: WithModel::new(src),
+            model: Model::new(src),
             visibility: Default::default(),
             computed_visibility: Default::default(),
         }

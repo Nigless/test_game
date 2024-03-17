@@ -1,16 +1,25 @@
+use std::f32::consts;
+
 use bevy::prelude::*;
+mod bindings;
+mod camera_controller;
 mod components;
-mod control;
 mod entities;
+mod hit_box;
 mod model;
 mod utils;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
-use control::Controls;
-use entities::ghost::{Ghost, GhostPlugin};
+use bindings::{Bindings, Control};
+use camera_controller::{CameraControllerPlugin, Spectate};
+use entities::{
+    ghost::{Ghost, GhostPlugin},
+    traffic_cone::TrafficCone,
+};
+use hit_box::HitBoxPlugin;
 use model::ModelPlugin;
 
-use crate::entities::package::Package;
+use crate::{camera_controller::CameraController, entities::package::Package};
 
 fn main() {
     App::new()
@@ -20,14 +29,19 @@ fn main() {
             RapierPhysicsPlugin::<NoUserData>::default(),
             RapierDebugRenderPlugin::default(),
         ))
-        .add_plugins((ModelPlugin, GhostPlugin))
-        .add_systems(Startup, startup)
+        .add_plugins((
+            ModelPlugin,
+            HitBoxPlugin,
+            GhostPlugin,
+            CameraControllerPlugin,
+        ))
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
             brightness: 0.9,
         })
         .insert_resource(ClearColor(Color::rgb(0.8, 0.8, 0.8)))
-        .insert_resource(Controls::default())
+        .insert_resource(Bindings::default())
+        .add_systems(PreStartup, startup)
         .run();
 }
 
@@ -36,25 +50,31 @@ fn startup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let velocity = Vec3::new(-2.3, -5.12, 0.0);
-    let normal = Vec3::new(0.3, 1.0, 0.0).normalize();
-
-    println!("{}", velocity - velocity.project_onto(normal));
-    // > [-0, 0, 1.9940411]
-
     commands
         .spawn(Ghost::new())
-        .insert(Transform::from_xyz(0.0, 10.0, 0.0));
+        .insert(Transform::from_xyz(0.0, 10.0, 0.0))
+        .insert(Spectate)
+        .insert(Control);
+
+    commands.spawn(Ghost::new()).insert(
+        Transform::from_xyz(10.0, 10.0, 0.0).with_rotation(Quat::from_rotation_y(consts::PI)),
+    );
 
     commands
         .spawn(Package::new())
         .insert(Transform::from_xyz(3.0, 2.0, 0.0));
 
-    commands.spawn(Collider::cuboid(500.0, 0.1, 500.0));
+    commands
+        .spawn(TrafficCone::new())
+        .insert(Transform::from_xyz(3.0, 2.0, 5.0));
+    commands
+        .spawn(TrafficCone::new())
+        .insert(Transform::from_xyz(3.0, 3.0, 5.0));
+    commands
+        .spawn(TrafficCone::new())
+        .insert(Transform::from_xyz(3.0, 4.0, 5.0));
 
-    let mesh = meshes.add(Mesh::from(Plane3d {
-        normal: Direction3d::try_from(Vec3::new(0.0, 1.0, 0.0)).unwrap(),
-    }));
+    commands.spawn(Collider::cuboid(500.0, 0.1, 500.0));
 
     let material = materials.add(StandardMaterial {
         base_color: Color::BLACK,
@@ -62,6 +82,10 @@ fn startup(
         unlit: false,
         ..Default::default()
     });
+
+    let mesh = meshes.add(Mesh::from(Plane3d {
+        normal: Direction3d::try_from(Vec3::new(0.0, 1.0, 0.0)).unwrap(),
+    }));
 
     for x in -5..5 {
         for z in -5..5 {

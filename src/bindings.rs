@@ -1,7 +1,13 @@
-use bevy::{ecs::system::Resource, input::keyboard::KeyCode};
+use bevy::{
+    ecs::{component::Component, system::Resource},
+    input::keyboard::KeyCode,
+};
+
+#[derive(Component)]
+pub struct Control;
 
 #[derive(Resource)]
-pub struct Controls {
+pub struct Bindings {
     pub move_forward: KeyCode,
     pub move_left: KeyCode,
     pub move_right: KeyCode,
@@ -9,9 +15,10 @@ pub struct Controls {
     pub jump: KeyCode,
     pub crouch: KeyCode,
     pub run: KeyCode,
+    pub pause: KeyCode,
 }
 
-impl Default for Controls {
+impl Default for Bindings {
     fn default() -> Self {
         Self {
             move_forward: KeyCode::KeyW,
@@ -21,6 +28,7 @@ impl Default for Controls {
             jump: KeyCode::Space,
             crouch: KeyCode::ControlLeft,
             run: KeyCode::ShiftLeft,
+            pause: KeyCode::Escape,
         }
     }
 }
