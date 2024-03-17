@@ -6,6 +6,7 @@ use bevy::prelude::*;
 
 #[derive(Bundle)]
 pub struct Package {
+    name: Name,
     transform: TransformBundle,
     collider: Collider,
     velocity: Velocity,
@@ -15,6 +16,7 @@ pub struct Package {
 impl Package {
     pub fn new() -> Self {
         Self {
+            name: Name::new("Package"),
             transform: TransformBundle::default(),
             collider: Collider::cuboid(1.0, 1.0, 1.0),
             velocity: Velocity::default(),
