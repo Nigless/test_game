@@ -70,7 +70,14 @@ fn startup(
         .spawn(TrafficCone::new())
         .insert(Transform::from_xyz(3.0, 4.0, 5.0));
 
-    commands.spawn(Collider::cuboid(500.0, 0.1, 500.0));
+    let floor = commands
+        .spawn((Name::new("floor"), TransformBundle::default()))
+        .id();
+
+    let collider = commands
+        .spawn((Name::new("collider"), Collider::cuboid(500.0, 0.1, 500.0)))
+        .id();
+    commands.entity(floor).add_child(collider);
 
     let material = materials.add(StandardMaterial {
         base_color: Color::RED,
@@ -81,16 +88,23 @@ fn startup(
 
     for x in -10..10 {
         for z in -10..10 {
-            commands.spawn(PbrBundle {
-                mesh: mesh.clone(),
-                material: material.clone(),
-                transform: Transform::from_translation(Vec3::new(
-                    x as f32 * 2.0,
-                    0.0,
-                    z as f32 * 2.0,
-                )),
-                ..Default::default()
-            });
+            let plane = commands
+                .spawn((
+                    Name::new("plane"),
+                    PbrBundle {
+                        mesh: mesh.clone(),
+                        material: material.clone(),
+                        transform: Transform::from_translation(Vec3::new(
+                            x as f32 * 2.0,
+                            0.0,
+                            z as f32 * 2.0,
+                        )),
+                        ..Default::default()
+                    },
+                ))
+                .id();
+
+            commands.entity(floor).add_child(plane);
         }
     }
 }
