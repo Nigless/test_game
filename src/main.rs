@@ -5,7 +5,6 @@ mod bindings;
 mod camera_controller;
 mod components;
 mod entities;
-mod hit_box;
 mod model;
 mod utils;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
@@ -16,7 +15,6 @@ use entities::{
     ghost::{Ghost, GhostPlugin},
     traffic_cone::TrafficCone,
 };
-use hit_box::HitBoxPlugin;
 use model::ModelPlugin;
 
 use crate::{camera_controller::CameraController, entities::package::Package};
@@ -29,12 +27,7 @@ fn main() {
             RapierPhysicsPlugin::<NoUserData>::default(),
             RapierDebugRenderPlugin::default(),
         ))
-        .add_plugins((
-            ModelPlugin,
-            HitBoxPlugin,
-            GhostPlugin,
-            CameraControllerPlugin,
-        ))
+        .add_plugins((ModelPlugin, GhostPlugin, CameraControllerPlugin))
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
             brightness: 0.9,

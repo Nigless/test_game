@@ -9,7 +9,7 @@ use bevy::{
 };
 use bevy_rapier3d::dynamics::{RigidBody, Velocity};
 
-use crate::{hit_box::HitBox, model::Model};
+use crate::model::Model;
 
 #[derive(Bundle)]
 pub struct TrafficCone {
@@ -17,7 +17,6 @@ pub struct TrafficCone {
     velocity: Velocity,
     body: RigidBody,
     model: Model,
-    hit_box: HitBox,
     transform: TransformBundle,
     material: Handle<StandardMaterial>,
 
@@ -32,7 +31,6 @@ impl TrafficCone {
             name: Name::new("TrafficCone"),
             body: RigidBody::Dynamic,
             model: Model::new("traffic_cone/model.glb#Mesh0/Primitive0"),
-            hit_box: HitBox::new("traffic_cone/model.glb#Mesh1/Primitive0"),
             velocity: Velocity::default(),
             transform: TransformBundle::default(),
             material: Handle::default(),
