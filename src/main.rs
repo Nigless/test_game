@@ -1,6 +1,9 @@
 use std::f32::consts;
 
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    render::{mesh::PlaneMeshBuilder, render_resource::ShaderType},
+};
 mod bindings;
 mod camera_controller;
 mod components;
@@ -30,9 +33,9 @@ fn main() {
         .add_plugins((ModelPlugin, GhostPlugin, CameraControllerPlugin))
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
-            brightness: 0.9,
+            brightness: 1000.0,
         })
-        .insert_resource(ClearColor(Color::rgb(0.8, 0.8, 0.8)))
+        .insert_resource(ClearColor(Color::rgb(1.0, 1.0, 1.0)))
         .insert_resource(Bindings::default())
         .add_systems(PreStartup, startup)
         .run();
@@ -70,25 +73,21 @@ fn startup(
     commands.spawn(Collider::cuboid(500.0, 0.1, 500.0));
 
     let material = materials.add(StandardMaterial {
-        base_color: Color::BLACK,
-        reflectance: 0.0,
-        unlit: false,
+        base_color: Color::RED,
         ..Default::default()
     });
 
-    let mesh = meshes.add(Mesh::from(Plane3d {
-        normal: Direction3d::try_from(Vec3::new(0.0, 1.0, 0.0)).unwrap(),
-    }));
+    let mesh = meshes.add(Mesh::from(PlaneMeshBuilder::from_size(Vec2::new(1.0, 1.0))));
 
-    for x in -5..5 {
-        for z in -5..5 {
+    for x in -10..10 {
+        for z in -10..10 {
             commands.spawn(PbrBundle {
                 mesh: mesh.clone(),
                 material: material.clone(),
                 transform: Transform::from_translation(Vec3::new(
-                    x as f32 * 5.0,
+                    x as f32 * 2.0,
                     0.0,
-                    z as f32 * 5.0,
+                    z as f32 * 2.0,
                 )),
                 ..Default::default()
             });
