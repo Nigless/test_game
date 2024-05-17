@@ -33,7 +33,7 @@ fn main() {
         .add_plugins((ModelPlugin, GhostPlugin, CameraControllerPlugin))
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
-            brightness: 1000.0,
+            brightness: 100.0,
         })
         .insert_resource(ClearColor(Color::rgb(1.0, 1.0, 1.0)))
         .insert_resource(Bindings::default())
@@ -46,6 +46,19 @@ fn startup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    commands.spawn(DirectionalLightBundle {
+        directional_light: DirectionalLight {
+            illuminance: light_consts::lux::OVERCAST_DAY,
+            shadows_enabled: true,
+            ..default()
+        },
+        transform: Transform {
+            rotation: Quat::from_rotation_x(-consts::PI / 4.),
+            ..default()
+        },
+        ..default()
+    });
+
     commands
         .spawn(Ghost::new())
         .insert(Transform::from_xyz(0.0, 10.0, 0.0))
@@ -65,46 +78,39 @@ fn startup(
         .insert(Transform::from_xyz(3.0, 2.0, 5.0));
     commands
         .spawn(TrafficCone::new())
-        .insert(Transform::from_xyz(3.0, 3.0, 5.0));
+        .insert(Transform::from_xyz(3.0, 5.0, 5.0));
     commands
         .spawn(TrafficCone::new())
-        .insert(Transform::from_xyz(3.0, 4.0, 5.0));
+        .insert(Transform::from_xyz(3.0, 8.0, 5.0));
 
-    let floor = commands
+    commands
         .spawn((Name::new("floor"), TransformBundle::default()))
-        .id();
+        .with_children(|commands| {
+            commands.spawn((Name::new("collider"), Collider::cuboid(500.0, 0.1, 500.0)));
 
-    let collider = commands
-        .spawn((Name::new("collider"), Collider::cuboid(500.0, 0.1, 500.0)))
-        .id();
-    commands.entity(floor).add_child(collider);
+            let material = materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                ..Default::default()
+            });
 
-    let material = materials.add(StandardMaterial {
-        base_color: Color::RED,
-        ..Default::default()
-    });
+            let mesh = meshes.add(Mesh::from(PlaneMeshBuilder::from_size(Vec2::new(1.0, 1.0))));
 
-    let mesh = meshes.add(Mesh::from(PlaneMeshBuilder::from_size(Vec2::new(1.0, 1.0))));
-
-    for x in -10..10 {
-        for z in -10..10 {
-            let plane = commands
-                .spawn((
-                    Name::new("plane"),
-                    PbrBundle {
-                        mesh: mesh.clone(),
-                        material: material.clone(),
-                        transform: Transform::from_translation(Vec3::new(
-                            x as f32 * 2.0,
-                            0.0,
-                            z as f32 * 2.0,
-                        )),
-                        ..Default::default()
-                    },
-                ))
-                .id();
-
-            commands.entity(floor).add_child(plane);
-        }
-    }
+            for x in -10..10 {
+                for z in -10..10 {
+                    commands.spawn((
+                        Name::new("plane"),
+                        PbrBundle {
+                            mesh: mesh.clone(),
+                            material: material.clone(),
+                            transform: Transform::from_translation(Vec3::new(
+                                x as f32 * 2.0,
+                                0.0,
+                                z as f32 * 2.0,
+                            )),
+                            ..Default::default()
+                        },
+                    ));
+                }
+            }
+        });
 }

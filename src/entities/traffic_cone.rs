@@ -3,7 +3,6 @@ use bevy::{
     core::Name,
     ecs::bundle::Bundle,
     pbr::StandardMaterial,
-    prelude::default,
     render::view::{InheritedVisibility, ViewVisibility, Visibility},
     transform::TransformBundle,
 };
@@ -28,9 +27,9 @@ pub struct TrafficCone {
 impl TrafficCone {
     pub fn new() -> Self {
         Self {
-            name: Name::new("TrafficCone"),
+            name: Name::new("Traffic cone"),
             body: RigidBody::Dynamic,
-            model: Model::new("traffic_cone/model.glb#Mesh0/Primitive0"),
+            model: Model::new("traffic_cone/model.glb"),
             velocity: Velocity::default(),
             transform: TransformBundle::default(),
             material: Handle::default(),
