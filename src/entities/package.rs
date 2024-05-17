@@ -18,7 +18,7 @@ impl Package {
         Self {
             name: Name::new("Package"),
             transform: TransformBundle::default(),
-            collider: Collider::cuboid(1.0, 1.0, 1.0),
+            collider: Collider::cuboid(0.5, 0.5, 0.5),
             velocity: Velocity::default(),
             body: RigidBody::Dynamic,
         }
