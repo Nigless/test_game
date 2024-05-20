@@ -3,11 +3,11 @@ use std::f32::consts;
 use crate::bindings::{Bindings, Control};
 use crate::camera_controller::{self, CameraController};
 
+use bevy::log::tracing_subscriber::filter;
 use bevy::{ecs::reflect, input::mouse::MouseMotion};
-use bevy_rapier3d::control::{
-    self, CharacterLength, KinematicCharacterController, KinematicCharacterControllerOutput,
-};
+use bevy_rapier3d::control::{self, CharacterLength};
 use bevy_rapier3d::dynamics::{GravityScale, RigidBody, Velocity};
+use bevy_rapier3d::geometry::RapierColliderHandle;
 use bevy_rapier3d::na::Isometry;
 use bevy_rapier3d::pipeline::QueryFilter;
 use bevy_rapier3d::plugin::RapierContext;
@@ -15,8 +15,7 @@ use bevy_rapier3d::prelude::Collider;
 
 use bevy::{prelude::*, transform};
 use bevy_rapier3d::prelude::LockedAxes;
-use bevy_rapier3d::rapier::geometry::ColliderSet;
-use bevy_rapier3d::rapier::pipeline::QueryPipeline;
+use bevy_rapier3d::rapier::control::KinematicCharacterController;
 
 #[derive(Resource, Default)]
 struct Input {
@@ -66,11 +65,11 @@ struct Characteristics {
 impl Default for Characteristics {
     fn default() -> Self {
         Self {
-            walking_speed: 0.8,
-            running_speed: 2.5,
+            walking_speed: 2.2,
+            running_speed: 4.1,
             falling_speed: 2.0,
             crouching_speed: 2.0,
-            jumping_high: 3.0,
+            jumping_high: 1.0,
             acceleration: 20.0,
         }
     }
@@ -121,6 +120,7 @@ impl Plugin for GhostPlugin {
                         .run_if(resource_changed::<Input>),
                     walk.before(update_state).run_if(resource_changed::<Input>),
                     update_state,
+                    respawn,
                 ),
             );
     }
@@ -132,7 +132,7 @@ fn resolve(mut entity_q: Query<Entity, With<Unresolved>>, mut commands: Commands
         ..default()
     });
 
-    let transform = Transform::from_xyz(0.0, 1.8 - 0.2, 0.0);
+    let transform = Transform::from_xyz(0.0, 0.9 - 0.2, 0.0);
 
     for entity in entity_q.iter_mut() {
         let camera = commands
@@ -191,6 +191,22 @@ fn update_input(
     input.crouching = keyboard.pressed(controls.crouch);
 }
 
+fn respawn(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut entity_q: Query<(&mut Velocity, &mut Transform), With<Control>>,
+) {
+    if !keyboard.just_pressed(KeyCode::Escape) {
+        return;
+    }
+
+    for (mut velocity, mut transform) in entity_q.iter_mut() {
+        velocity.linvel = Vec3::ZERO;
+        velocity.angvel = Vec3::ZERO;
+        transform.translation = Vec3::Y * 2.0;
+        transform.rotation = Quat::IDENTITY;
+    }
+}
+
 fn look_around(
     input: Res<Input>,
     mut entity_q: Query<
@@ -234,15 +250,68 @@ fn walk(
             .mul_vec3(Vec3::new(input.moving.x, 0.0, input.moving.y))
             .normalize_or_zero();
 
-        velocity.linvel = velocity.linvel.lerp(
-            direction * speed,
-            characteristics.acceleration * time.delta_seconds(),
-        );
+        let result = direction * speed * time.delta_seconds();
+
+        velocity.linvel.x = result.x;
+        velocity.linvel.z = result.z;
 
         if input.jumping && (state.standing || state.moving || state.crouching) {
-            velocity.linvel.y += characteristics.jumping_high
+            println!("input.jumping");
+            velocity.linvel.y = characteristics.jumping_high
         }
     }
+}
+
+fn collide_and_slide(
+    rapier: &Res<RapierContext>,
+    rotation: Quat,
+    collider: &Collider,
+    entity: Entity,
+    velocity: Vec3,
+    position: Vec3,
+) -> Vec3 {
+    let skin_width = 0.1;
+
+    let vector_cast = velocity.normalize_or_zero() * (velocity.length() + skin_width);
+
+    let collision = rapier
+        .cast_shape(
+            position,
+            rotation,
+            vector_cast,
+            collider,
+            1.0,
+            true,
+            QueryFilter::new().exclude_collider(entity),
+        )
+        .map_or(None, |(_, hit)| {
+            hit.details.map(|details| (hit.toi, details))
+        });
+
+    if let Some((time_of_impact, details)) = collision {
+        let normal = details.normal1.normalize_or_zero();
+
+        let mut vector_to_surface =
+            velocity.normalize_or_zero() * (vector_cast.length() * time_of_impact - skin_width);
+
+        if vector_to_surface.length() <= skin_width {
+            vector_to_surface = Vec3::ZERO;
+        }
+
+        let vector_slide = velocity.reject_from(normal);
+
+        return vector_to_surface
+            + collide_and_slide(
+                rapier,
+                rotation,
+                collider,
+                entity,
+                vector_slide,
+                position + vector_to_surface,
+            );
+    };
+
+    return velocity;
 }
 
 fn update_state(
@@ -258,47 +327,23 @@ fn update_state(
     )>,
 ) {
     for (entity, mut state, mut velocity, mut transform, collider, gravity) in entity_q.iter_mut() {
-        let gravity = 9.81 * gravity.0 * time.delta_seconds();
+        // let gravity = Vec3::NEG_Y * 9.81 * gravity.0 * time.delta_seconds();
 
-        velocity.linvel.y -= gravity;
+        let rotation = transform.rotation;
+        let position = transform.translation;
 
-        let collision = match rapier.cast_shape(
-            transform.translation,
-            transform.rotation,
-            velocity.linvel,
+        velocity.linvel = collide_and_slide(
+            &rapier,
+            rotation,
             collider,
-            4.0,
-            true,
-            QueryFilter::new().exclude_collider(entity),
-        ) {
-            Some((_, toi)) => match toi.details {
-                Some(d) => {
-                    let vector_to_collision = velocity.linvel * toi.toi;
-                    let vector_to_surface = (vector_to_collision.project_onto(d.normal1)
-                        + d.normal1)
-                        .project_onto(velocity.linvel);
-
-                    if vector_to_surface.angle_between(velocity.linvel) > 0.0 {
-                        Some(d.normal1)
-                    } else {
-                        None
-                    }
-                }
-                None => None,
-            },
-            None => None,
-        };
-
-        let mut grounded = false;
-        if let Some(normal) = collision {
-            velocity.linvel = velocity.linvel - velocity.linvel.project_onto(normal);
-
-            if normal.angle_between(Vec3::Y) < consts::PI / 4.0 {
-                grounded = true
-            }
-        };
+            entity,
+            velocity.linvel + Vec3::NEG_Y * 9.81 * gravity.0 * time.delta_seconds(),
+            position,
+        );
 
         transform.translation += velocity.linvel;
+
+        let grounded = true;
 
         if grounded {
             let speed = velocity.linvel.xz().length();
