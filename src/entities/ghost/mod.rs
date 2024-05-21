@@ -256,7 +256,6 @@ fn walk(
         velocity.linvel.z = result.z;
 
         if input.jumping && (state.standing || state.moving || state.crouching) {
-            println!("input.jumping");
             velocity.linvel.y = characteristics.jumping_high
         }
     }
@@ -327,8 +326,6 @@ fn update_state(
     )>,
 ) {
     for (entity, mut state, mut velocity, mut transform, collider, gravity) in entity_q.iter_mut() {
-        // let gravity = Vec3::NEG_Y * 9.81 * gravity.0 * time.delta_seconds();
-
         let rotation = transform.rotation;
         let position = transform.translation;
 
