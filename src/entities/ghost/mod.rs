@@ -1,4 +1,5 @@
 use std::f32::consts;
+use std::slice::Windows;
 
 use crate::bindings::{Bindings, Control};
 use crate::camera_controller::{self, CameraController};
@@ -10,7 +11,7 @@ use bevy_rapier3d::dynamics::{GravityScale, RigidBody, Velocity};
 use bevy_rapier3d::geometry::RapierColliderHandle;
 use bevy_rapier3d::na::Isometry;
 use bevy_rapier3d::pipeline::QueryFilter;
-use bevy_rapier3d::plugin::RapierContext;
+use bevy_rapier3d::plugin::{RapierConfiguration, RapierContext};
 use bevy_rapier3d::prelude::Collider;
 
 use bevy::{prelude::*, transform};
@@ -65,11 +66,11 @@ struct Characteristics {
 impl Default for Characteristics {
     fn default() -> Self {
         Self {
-            walking_speed: 2.2,
-            running_speed: 4.1,
-            falling_speed: 2.0,
-            crouching_speed: 2.0,
-            jumping_high: 1.0,
+            walking_speed: 0.02,
+            running_speed: 0.04,
+            falling_speed: 0.01,
+            crouching_speed: 0.01,
+            jumping_high: 0.03,
             acceleration: 20.0,
         }
     }
@@ -209,18 +210,27 @@ fn respawn(
 
 fn look_around(
     input: Res<Input>,
-    mut entity_q: Query<
-        (&mut Transform, &CameraController, &State),
-        (Without<Unresolved>, With<Control>),
-    >,
+    mut window_q: Query<&mut Window>,
+    mut entity_q: Query<(&mut Transform, &CameraController), (Without<Unresolved>, With<Control>)>,
     mut camera_q: Query<&mut Transform, (With<Camera>, Without<CameraController>)>,
 ) {
-    for (mut entity_transform, controller, state) in entity_q.iter_mut() {
+    // let mut window = window_q.single_mut();
+    // let width = window.width();
+    // let height = window.height();
+    // window.set_cursor_position(Some(Vec2::new(width / 2., height / 2.)));
+    // window.cursor.visible = false;
+
+    for (mut entity_transform, controller) in entity_q.iter_mut() {
         let mut camera_transform = camera_q
             .get_mut(controller.target)
             .expect("CameraController target doesn't exist or doesn't have a Camera component");
 
-        camera_transform.rotation *= Quat::from_rotation_x(input.looking.y * 0.002);
+        let rotation = camera_transform.rotation * Quat::from_rotation_x(input.looking.y * 0.002);
+
+        if (rotation * Vec3::Y).y > 0.0 {
+            camera_transform.rotation = rotation;
+        }
+
         entity_transform.rotation *= Quat::from_rotation_y(input.looking.x * 0.002);
     }
 }
@@ -231,7 +241,13 @@ fn walk(
     mut entity_q: Query<(&mut Velocity, &mut Transform, &State, &Characteristics), With<Control>>,
 ) {
     for (mut velocity, mut transform, state, characteristics) in entity_q.iter_mut() {
-        let speed = if state.standing || state.moving {
+        let is_grounded = state.standing || state.moving || state.crouching;
+
+        if input.jumping && is_grounded {
+            velocity.linvel.y = characteristics.jumping_high;
+        }
+
+        let max_speed = if state.standing || state.moving {
             if input.running {
                 characteristics.running_speed
             } else {
@@ -242,22 +258,48 @@ fn walk(
         } else if state.crouching {
             characteristics.crouching_speed
         } else {
-            0.0
+            continue;
         };
 
-        let direction = transform
-            .rotation
-            .mul_vec3(Vec3::new(input.moving.x, 0.0, input.moving.y))
-            .normalize_or_zero();
+        let direction = if input.moving == Vec2::ZERO {
+            Vec2::ZERO
+        } else {
+            (transform.rotation * Vec3::new(input.moving.x, 0.0, input.moving.y))
+                .xz()
+                .normalize_or_zero()
+        };
 
-        let result = direction * speed * time.delta_seconds();
+        let move_velocity = velocity.linvel.xz();
 
-        velocity.linvel.x = result.x;
-        velocity.linvel.z = result.z;
+        if is_grounded {
+            if input.jumping {
+                velocity.linvel.y = characteristics.jumping_high;
+            }
 
-        if input.jumping && (state.standing || state.moving || state.crouching) {
-            velocity.linvel.y = characteristics.jumping_high
+            let result = move_velocity.lerp(
+                direction * max_speed,
+                characteristics.acceleration * time.delta_seconds(),
+            );
+
+            velocity.linvel = Vec3::new(result.x, velocity.linvel.y, result.y);
+
+            continue;
         }
+
+        if direction == Vec2::ZERO {
+            continue;
+        }
+
+        let speed = max_speed * time.delta_seconds();
+
+        let mut result = move_velocity + direction * speed;
+
+        if result.length() > max_speed {
+            let coefficient = (move_velocity.angle_between(direction) / consts::PI).abs();
+            result = result.normalize_or_zero() * (move_velocity.length() - speed * coefficient);
+        }
+
+        velocity.linvel = Vec3::new(result.x, velocity.linvel.y, result.y);
     }
 }
 
@@ -266,13 +308,14 @@ fn collide_and_slide(
     rotation: Quat,
     collider: &Collider,
     entity: Entity,
-    velocity: Vec3,
+    gravity: Vec3,
+    mut velocity: Vec3,
     position: Vec3,
-) -> Vec3 {
+) -> (Vec3, Vec3) {
     let skin_width = 0.1;
 
-    let vector_cast = velocity.normalize_or_zero() * (velocity.length() + skin_width);
-
+    let mut vector_cast = velocity + gravity;
+    vector_cast = vector_cast.normalize_or_zero() * (vector_cast.length() + skin_width);
     let collision = rapier
         .cast_shape(
             position,
@@ -291,31 +334,38 @@ fn collide_and_slide(
         let normal = details.normal1.normalize_or_zero();
 
         let mut vector_to_surface =
-            velocity.normalize_or_zero() * (vector_cast.length() * time_of_impact - skin_width);
+            vector_cast.normalize_or_zero() * (vector_cast.length() * time_of_impact - skin_width);
 
         if vector_to_surface.length() <= skin_width {
             vector_to_surface = Vec3::ZERO;
         }
 
+        if gravity.angle_between(normal) < consts::PI * 0.75 {
+            velocity = velocity + gravity - vector_to_surface
+        }
+
         let vector_slide = velocity.reject_from(normal);
 
-        return vector_to_surface
-            + collide_and_slide(
-                rapier,
-                rotation,
-                collider,
-                entity,
-                vector_slide,
-                position + vector_to_surface,
-            );
+        let (vector_result, _) = collide_and_slide(
+            rapier,
+            rotation,
+            collider,
+            entity,
+            Vec3::ZERO,
+            vector_slide,
+            position + vector_to_surface,
+        );
+
+        return (vector_to_surface + vector_result, normal);
     };
 
-    return velocity;
+    return (velocity + gravity, Vec3::ZERO);
 }
 
 fn update_state(
     time: Res<Time>,
     rapier: Res<RapierContext>,
+    rapier_config: Res<RapierConfiguration>,
     mut entity_q: Query<(
         Entity,
         &mut State,
@@ -328,54 +378,62 @@ fn update_state(
     for (entity, mut state, mut velocity, mut transform, collider, gravity) in entity_q.iter_mut() {
         let rotation = transform.rotation;
         let position = transform.translation;
+        let vector_gravity = rapier_config.gravity * gravity.0 * time.delta_seconds().powi(2);
 
-        velocity.linvel = collide_and_slide(
+        let (corrected_velocity, normal) = collide_and_slide(
             &rapier,
             rotation,
             collider,
             entity,
-            velocity.linvel + Vec3::NEG_Y * 9.81 * gravity.0 * time.delta_seconds(),
+            vector_gravity,
+            velocity.linvel,
             position,
         );
 
-        transform.translation += velocity.linvel;
+        let mut grounded = false;
 
-        let grounded = true;
+        if vector_gravity.angle_between(normal) > consts::PI * 0.75 {
+            grounded = true;
+        }
+
+        velocity.linvel = corrected_velocity;
+
+        transform.translation += velocity.linvel;
 
         if grounded {
             let speed = velocity.linvel.xz().length();
 
-            if state.standing && speed > 0.01 {
+            if state.standing && speed > 0.001 {
                 state.standing = false;
                 state.moving = true;
                 continue;
             }
 
-            if state.moving && speed < 0.01 {
+            if state.moving && speed < 0.001 {
                 state.moving = false;
                 state.standing = true;
                 continue;
             }
 
-            if state.rising && speed > 0.01 {
+            if state.rising && speed > 0.001 {
                 state.rising = false;
                 state.moving = true;
                 continue;
             }
 
-            if state.rising && speed < 0.01 {
+            if state.rising && speed < 0.001 {
                 state.rising = false;
                 state.standing = true;
                 continue;
             }
 
-            if state.falling && speed > 0.01 {
+            if state.falling && speed > 0.001 {
                 state.falling = false;
                 state.moving = true;
                 continue;
             }
 
-            if state.falling && speed < 0.01 {
+            if state.falling && speed < 0.001 {
                 state.falling = false;
                 state.standing = true;
                 continue;
