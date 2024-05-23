@@ -30,9 +30,9 @@ fn main() {
         .add_plugins((ModelPlugin, GhostPlugin, CameraControllerPlugin))
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
-            brightness: 100.0,
+            brightness: 500.0,
         })
-        .insert_resource(ClearColor(Color::rgb(1.0, 1.0, 1.0)))
+        .insert_resource(ClearColor(Color::rgb(0.7, 0.7, 0.7)))
         .insert_resource(Bindings::default())
         .add_systems(PreStartup, startup)
         .run();
@@ -47,7 +47,7 @@ fn startup(mut commands: Commands) {
 
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
-            illuminance: light_consts::lux::OVERCAST_DAY,
+            illuminance: 2000.0,
             shadows_enabled: true,
             ..default()
         },
