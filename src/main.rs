@@ -1,21 +1,23 @@
 use std::f32::consts;
 
 use bevy::prelude::*;
-mod bindings;
 mod camera_controller;
 mod components;
+mod control;
 mod entities;
 mod model;
 mod utils;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
-use bindings::{Bindings, Control};
 use camera_controller::{CameraControllerPlugin, Spectate};
+use character_body::{CharacterBody, CharacterBodyPlugin};
+use control::{Bindings, Control, ControlPlugin, Input};
 use entities::{
     ghost::{Ghost, GhostPlugin},
     traffic_cone::TrafficCone,
 };
 use model::{Model, ModelPlugin};
+mod character_body;
 
 use crate::entities::package::Package;
 
@@ -27,13 +29,18 @@ fn main() {
             RapierPhysicsPlugin::<NoUserData>::default(),
             RapierDebugRenderPlugin::default(),
         ))
-        .add_plugins((ModelPlugin, GhostPlugin, CameraControllerPlugin))
+        .add_plugins((
+            ModelPlugin,
+            GhostPlugin,
+            CameraControllerPlugin,
+            ControlPlugin,
+            CharacterBodyPlugin,
+        ))
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
             brightness: 500.0,
         })
         .insert_resource(ClearColor(Color::rgb(0.7, 0.7, 0.7)))
-        .insert_resource(Bindings::default())
         .add_systems(PreStartup, startup)
         .run();
 }

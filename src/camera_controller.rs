@@ -19,7 +19,7 @@ impl Plugin for CameraControllerPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<CameraController>()
             .add_systems(PostStartup, resolve)
-            .add_systems(PreUpdate, (clean_up, update.after(clean_up)));
+            .add_systems(PreUpdate, (clean_up.before(update), update));
     }
 }
 
@@ -43,6 +43,16 @@ fn resolve(entity_q: Query<&CameraController, With<Spectate>>, mut camera_q: Que
     camera.is_active = true;
 }
 
+fn clean_up(entity_q: RemovedComponents<Spectate>, mut camera_q: Query<&mut Camera>) {
+    if entity_q.is_empty() {
+        return;
+    }
+
+    for mut camera in camera_q.iter_mut() {
+        camera.is_active = false
+    }
+}
+
 fn update(entity_q: Query<&CameraController, Added<Spectate>>, mut camera_q: Query<&mut Camera>) {
     if entity_q.is_empty() {
         return;
@@ -57,14 +67,4 @@ fn update(entity_q: Query<&CameraController, Added<Spectate>>, mut camera_q: Que
         .expect("CameraController target doesn't exist or doesn't have a Camera component");
 
     camera.is_active = true;
-}
-
-fn clean_up(entity_q: RemovedComponents<Spectate>, mut camera_q: Query<&mut Camera>) {
-    if entity_q.is_empty() {
-        return;
-    }
-
-    for mut camera in camera_q.iter_mut() {
-        camera.is_active = false
-    }
 }

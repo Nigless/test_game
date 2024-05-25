@@ -1,8 +1,9 @@
 use std::f32::consts;
 use std::slice::Windows;
 
-use crate::bindings::{Bindings, Control};
 use crate::camera_controller::{self, CameraController};
+use crate::character_body::CharacterBody;
+use crate::control::{Bindings, Control, Input};
 
 use bevy::log::tracing_subscriber::filter;
 use bevy::{ecs::reflect, input::mouse::MouseMotion};
@@ -18,52 +19,34 @@ use bevy::{prelude::*, transform};
 use bevy_rapier3d::prelude::LockedAxes;
 use bevy_rapier3d::rapier::control::KinematicCharacterController;
 
-#[derive(Resource, Default)]
-struct Input {
-    pub moving: Vec2,
-    pub looking: Vec2,
-    pub jumping: bool,
-    pub running: bool,
-    pub crouching: bool,
-}
+use self::crouching_state::{CrouchingState, CrouchingStatePlugin};
+use self::falling_state::{FallingState, FallingStatePlugin};
+use self::moving_state::{MovingState, MovingStatePlugin};
+use self::rising_state::{RisingState, RisingStatePlugin};
+use self::standing_state::{StandingState, StandingStatePlugin};
+mod crouching_state;
+mod falling_state;
+mod moving_state;
+mod rising_state;
+mod running_state;
+mod standing_state;
 
 #[derive(Component)]
 struct Unresolved;
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
-struct State {
-    pub standing: bool,
-    pub moving: bool,
-    pub rising: bool,
-    pub falling: bool,
-    pub crouching: bool,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            standing: true,
-            moving: false,
-            rising: false,
-            falling: false,
-            crouching: false,
-        }
-    }
-}
-
-#[derive(Component, Reflect)]
-#[reflect(Component)]
-struct Characteristics {
+struct Stats {
     pub walking_speed: f32,
     pub running_speed: f32,
     pub falling_speed: f32,
     pub crouching_speed: f32,
     pub jumping_high: f32,
+    pub crouching_jump_high: f32,
     pub acceleration: f32,
 }
 
-impl Default for Characteristics {
+impl Default for Stats {
     fn default() -> Self {
         Self {
             walking_speed: 0.02,
@@ -71,6 +54,7 @@ impl Default for Characteristics {
             falling_speed: 0.01,
             crouching_speed: 0.01,
             jumping_high: 0.03,
+            crouching_jump_high: 0.02,
             acceleration: 20.0,
         }
     }
@@ -80,12 +64,12 @@ impl Default for Characteristics {
 pub struct Ghost {
     unresolved: Unresolved,
     name: Name,
-    state: State,
-    characteristics: Characteristics,
+    state: StandingState,
+    stats: Stats,
     transform: TransformBundle,
-    collider: Collider,
     velocity: Velocity,
-    gravity: GravityScale,
+    collider: Collider,
+    character_body: CharacterBody,
 }
 
 impl Ghost {
@@ -93,12 +77,12 @@ impl Ghost {
         Self {
             unresolved: Unresolved,
             name: Name::new("Ghost"),
-            state: State::default(),
-            characteristics: Characteristics::default(),
+            state: StandingState,
+            stats: Stats::default(),
             transform: TransformBundle::default(),
             collider: Collider::capsule_y(0.9, 0.2),
+            character_body: CharacterBody::default(),
             velocity: Velocity::default(),
-            gravity: GravityScale(1.0),
         }
     }
 }
@@ -107,23 +91,25 @@ pub struct GhostPlugin;
 
 impl Plugin for GhostPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Input::default())
-            .register_type::<State>()
-            .register_type::<Characteristics>()
-            .add_systems(Startup, resolve)
-            .add_systems(First, resolve)
-            .add_systems(
-                Update,
-                (
-                    update_input.before(look_around).before(walk),
-                    look_around
-                        .before(update_state)
-                        .run_if(resource_changed::<Input>),
-                    walk.before(update_state).run_if(resource_changed::<Input>),
-                    update_state,
-                    respawn,
-                ),
-            );
+        app.add_plugins((
+            StandingStatePlugin,
+            MovingStatePlugin,
+            RisingStatePlugin,
+            FallingStatePlugin,
+            CrouchingStatePlugin,
+        ))
+        .register_type::<Stats>()
+        .add_systems(Startup, resolve)
+        .add_systems(First, resolve)
+        .add_systems(
+            Update,
+            (
+                look_around.run_if(resource_changed::<Input>),
+                move_grounded,
+                move_falling,
+                respawn,
+            ),
+        );
     }
 }
 
@@ -150,46 +136,6 @@ fn resolve(mut entity_q: Query<Entity, With<Unresolved>>, mut commands: Commands
             .insert(CameraController { target: camera })
             .add_child(camera);
     }
-}
-
-fn update_input(
-    mut mouse: EventReader<MouseMotion>,
-    keyboard: Res<ButtonInput<KeyCode>>,
-    controls: Res<Bindings>,
-    mut input: ResMut<Input>,
-    entity_q: Query<&Control>,
-) {
-    if entity_q.is_empty() {
-        return;
-    }
-
-    input.looking = Vec2::ZERO;
-
-    for event in mouse.read().into_iter() {
-        input.looking += Vec2::new(-event.delta.x, -event.delta.y);
-    }
-
-    input.moving = Vec2::ZERO;
-
-    if keyboard.pressed(controls.move_left) {
-        input.moving += Vec2::new(-1.0, 0.0);
-    }
-
-    if keyboard.pressed(controls.move_right) {
-        input.moving += Vec2::new(1.0, 0.0);
-    }
-
-    if keyboard.pressed(controls.move_forward) {
-        input.moving += Vec2::new(0.0, -1.0);
-    }
-
-    if keyboard.pressed(controls.move_backward) {
-        input.moving += Vec2::new(0.0, 1.0);
-    }
-
-    input.jumping = keyboard.just_pressed(controls.jump);
-    input.running = keyboard.pressed(controls.run);
-    input.crouching = keyboard.pressed(controls.crouch);
 }
 
 fn respawn(
@@ -225,38 +171,45 @@ fn look_around(
             .get_mut(controller.target)
             .expect("CameraController target doesn't exist or doesn't have a Camera component");
 
-        let rotation = camera_transform.rotation * Quat::from_rotation_x(input.looking.y * 0.002);
+        let rotation =
+            camera_transform.rotation * Quat::from_rotation_x(input.looking_around.y * 0.002);
 
         if (rotation * Vec3::Y).y > 0.0 {
             camera_transform.rotation = rotation;
         }
 
-        entity_transform.rotation *= Quat::from_rotation_y(input.looking.x * 0.002);
+        entity_transform.rotation *= Quat::from_rotation_y(input.looking_around.x * 0.002);
     }
 }
 
-fn walk(
+fn move_grounded(
     time: Res<Time>,
     input: Res<Input>,
-    mut entity_q: Query<(&mut Velocity, &mut Transform, &State, &Characteristics), With<Control>>,
+    mut entity_q: Query<
+        (
+            &mut Velocity,
+            &Transform,
+            &Stats,
+            Option<&StandingState>,
+            Option<&MovingState>,
+            Option<&CrouchingState>,
+        ),
+        (With<Control>, Without<RisingState>, Without<FallingState>),
+    >,
 ) {
-    for (mut velocity, mut transform, state, characteristics) in entity_q.iter_mut() {
-        let is_grounded = state.standing || state.moving || state.crouching;
+    for (mut velocity, transform, stats, standing, moving, crouching) in entity_q.iter_mut() {
+        let standing = standing.is_some();
+        let moving = moving.is_some();
+        let crouching = crouching.is_some();
 
-        if input.jumping && is_grounded {
-            velocity.linvel.y = characteristics.jumping_high;
-        }
-
-        let max_speed = if state.standing || state.moving {
+        let max_speed = if standing || moving {
             if input.running {
-                characteristics.running_speed
+                stats.running_speed
             } else {
-                characteristics.walking_speed
+                stats.walking_speed
             }
-        } else if state.falling || state.rising {
-            characteristics.falling_speed
-        } else if state.crouching {
-            characteristics.crouching_speed
+        } else if crouching {
+            stats.crouching_speed
         } else {
             continue;
         };
@@ -271,24 +224,47 @@ fn walk(
 
         let move_velocity = velocity.linvel.xz();
 
-        if is_grounded {
-            if input.jumping {
-                velocity.linvel.y = characteristics.jumping_high;
-            }
+        let jump_high = if crouching {
+            stats.crouching_jump_high
+        } else {
+            stats.jumping_high
+        };
 
-            let result = move_velocity.lerp(
-                direction * max_speed,
-                characteristics.acceleration * time.delta_seconds(),
-            );
-
-            velocity.linvel = Vec3::new(result.x, velocity.linvel.y, result.y);
-
-            continue;
+        if input.jumping {
+            velocity.linvel.y = jump_high;
         }
 
-        if direction == Vec2::ZERO {
-            continue;
+        let result = move_velocity.lerp(
+            direction * max_speed,
+            stats.acceleration * time.delta_seconds(),
+        );
+
+        velocity.linvel = Vec3::new(result.x, velocity.linvel.y, result.y);
+
+        continue;
+    }
+}
+
+fn move_falling(
+    time: Res<Time>,
+    input: Res<Input>,
+    mut entity_q: Query<
+        (&mut Velocity, &Transform, &Stats),
+        (With<Control>, Or<(With<RisingState>, With<FallingState>)>),
+    >,
+) {
+    for (mut velocity, transform, stats) in entity_q.iter_mut() {
+        if input.moving == Vec2::ZERO {
+            return;
         }
+
+        let direction = (transform.rotation * Vec3::new(input.moving.x, 0.0, input.moving.y))
+            .xz()
+            .normalize_or_zero();
+
+        let max_speed = stats.falling_speed;
+
+        let move_velocity = velocity.linvel.xz();
 
         let speed = max_speed * time.delta_seconds();
 
@@ -300,182 +276,5 @@ fn walk(
         }
 
         velocity.linvel = Vec3::new(result.x, velocity.linvel.y, result.y);
-    }
-}
-
-fn collide_and_slide(
-    rapier: &Res<RapierContext>,
-    rotation: Quat,
-    collider: &Collider,
-    entity: Entity,
-    gravity: Vec3,
-    mut velocity: Vec3,
-    position: Vec3,
-) -> (Vec3, Vec3) {
-    let skin_width = 0.1;
-
-    let mut vector_cast = velocity + gravity;
-    vector_cast = vector_cast.normalize_or_zero() * (vector_cast.length() + skin_width);
-    let collision = rapier
-        .cast_shape(
-            position,
-            rotation,
-            vector_cast,
-            collider,
-            1.0,
-            true,
-            QueryFilter::new().exclude_collider(entity),
-        )
-        .map_or(None, |(_, hit)| {
-            hit.details.map(|details| (hit.toi, details))
-        });
-
-    if let Some((time_of_impact, details)) = collision {
-        let normal = details.normal1.normalize_or_zero();
-
-        let mut vector_to_surface =
-            vector_cast.normalize_or_zero() * (vector_cast.length() * time_of_impact - skin_width);
-
-        if vector_to_surface.length() <= skin_width {
-            vector_to_surface = Vec3::ZERO;
-        }
-
-        if gravity.angle_between(normal) < consts::PI * 0.75 {
-            velocity = velocity + gravity - vector_to_surface
-        }
-
-        let vector_slide = velocity.reject_from(normal);
-
-        let (vector_result, _) = collide_and_slide(
-            rapier,
-            rotation,
-            collider,
-            entity,
-            Vec3::ZERO,
-            vector_slide,
-            position + vector_to_surface,
-        );
-
-        return (vector_to_surface + vector_result, normal);
-    };
-
-    return (velocity + gravity, Vec3::ZERO);
-}
-
-fn update_state(
-    time: Res<Time>,
-    rapier: Res<RapierContext>,
-    rapier_config: Res<RapierConfiguration>,
-    mut entity_q: Query<(
-        Entity,
-        &mut State,
-        &mut Velocity,
-        &mut Transform,
-        &Collider,
-        &GravityScale,
-    )>,
-) {
-    for (entity, mut state, mut velocity, mut transform, collider, gravity) in entity_q.iter_mut() {
-        let rotation = transform.rotation;
-        let position = transform.translation;
-        let vector_gravity = rapier_config.gravity * gravity.0 * time.delta_seconds().powi(2);
-
-        let (corrected_velocity, normal) = collide_and_slide(
-            &rapier,
-            rotation,
-            collider,
-            entity,
-            vector_gravity,
-            velocity.linvel,
-            position,
-        );
-
-        let mut grounded = false;
-
-        if vector_gravity.angle_between(normal) > consts::PI * 0.75 {
-            grounded = true;
-        }
-
-        velocity.linvel = corrected_velocity;
-
-        transform.translation += velocity.linvel;
-
-        if grounded {
-            let speed = velocity.linvel.xz().length();
-
-            if state.standing && speed > 0.001 {
-                state.standing = false;
-                state.moving = true;
-                continue;
-            }
-
-            if state.moving && speed < 0.001 {
-                state.moving = false;
-                state.standing = true;
-                continue;
-            }
-
-            if state.rising && speed > 0.001 {
-                state.rising = false;
-                state.moving = true;
-                continue;
-            }
-
-            if state.rising && speed < 0.001 {
-                state.rising = false;
-                state.standing = true;
-                continue;
-            }
-
-            if state.falling && speed > 0.001 {
-                state.falling = false;
-                state.moving = true;
-                continue;
-            }
-
-            if state.falling && speed < 0.001 {
-                state.falling = false;
-                state.standing = true;
-                continue;
-            }
-
-            continue;
-        };
-
-        if state.standing && velocity.linvel.y > 0.0 {
-            state.standing = false;
-            state.rising = true;
-            continue;
-        }
-
-        if state.moving && velocity.linvel.y > 0.0 {
-            state.moving = false;
-            state.rising = true;
-            continue;
-        }
-
-        if state.rising && velocity.linvel.y < 0.0 {
-            state.rising = false;
-            state.falling = true;
-            continue;
-        }
-
-        if state.falling && velocity.linvel.y > 0.0 {
-            state.falling = false;
-            state.rising = true;
-            continue;
-        }
-
-        if state.standing {
-            state.standing = false;
-            state.falling = true;
-            continue;
-        }
-
-        if state.moving {
-            state.moving = false;
-            state.falling = true;
-            continue;
-        }
     }
 }
