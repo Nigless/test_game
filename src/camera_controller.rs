@@ -23,7 +23,9 @@ impl Plugin for CameraControllerPlugin {
     }
 }
 
-fn resolve(entity_q: Query<&CameraController, With<Spectate>>, mut camera_q: Query<&mut Camera>) {
+type CameraQuery<'world, 'state, 'q> = Query<'world, 'state, &'q mut Camera, With<Camera3d>>;
+
+fn resolve(entity_q: Query<&CameraController, With<Spectate>>, mut camera_q: CameraQuery) {
     for mut camera in camera_q.iter_mut() {
         camera.is_active = false
     }
@@ -43,7 +45,7 @@ fn resolve(entity_q: Query<&CameraController, With<Spectate>>, mut camera_q: Que
     camera.is_active = true;
 }
 
-fn clean_up(entity_q: RemovedComponents<Spectate>, mut camera_q: Query<&mut Camera>) {
+fn clean_up(entity_q: RemovedComponents<Spectate>, mut camera_q: CameraQuery) {
     if entity_q.is_empty() {
         return;
     }
@@ -53,7 +55,7 @@ fn clean_up(entity_q: RemovedComponents<Spectate>, mut camera_q: Query<&mut Came
     }
 }
 
-fn update(entity_q: Query<&CameraController, Added<Spectate>>, mut camera_q: Query<&mut Camera>) {
+fn update(entity_q: Query<&CameraController, Added<Spectate>>, mut camera_q: CameraQuery) {
     if entity_q.is_empty() {
         return;
     }

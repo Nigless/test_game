@@ -1,12 +1,18 @@
 use std::f32::consts;
 
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    render::{
+        camera::CameraRenderGraph,
+        render_resource::{AsBindGroup, ShaderRef},
+        view::VisibleEntities,
+    },
+    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
+};
 mod camera_controller;
-mod components;
 mod control;
 mod entities;
 mod model;
-mod utils;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
 use camera_controller::{CameraControllerPlugin, Spectate};
@@ -27,7 +33,8 @@ fn main() {
             DefaultPlugins,
             WorldInspectorPlugin::new(),
             RapierPhysicsPlugin::<NoUserData>::default(),
-            RapierDebugRenderPlugin::default(),
+            // RapierDebugRenderPlugin::default(),
+            UiMaterialPlugin::<CrosshairMaterial>::default(),
         ))
         .add_plugins((
             ModelPlugin,
@@ -45,7 +52,59 @@ fn main() {
         .run();
 }
 
-fn startup(mut commands: Commands) {
+#[derive(AsBindGroup, Asset, TypePath, Debug, Clone)]
+struct CrosshairMaterial {
+    #[uniform(0)]
+    color: Vec4,
+}
+
+impl UiMaterial for CrosshairMaterial {
+    fn fragment_shader() -> ShaderRef {
+        "crosshair.wgsl".into()
+    }
+}
+
+fn startup(mut commands: Commands, mut crosshair_materials: ResMut<Assets<CrosshairMaterial>>) {
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                top: Val::Percent(50.0),
+                left: Val::Percent(50.0),
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|commands| {
+            commands.spawn(MaterialNodeBundle {
+                style: Style {
+                    position_type: PositionType::Absolute,
+                    width: Val::VMin(0.7),
+                    height: Val::VMin(0.7),
+                    top: Val::VMin(-0.35),
+                    left: Val::VMin(-0.35),
+                    ..default()
+                },
+                material: crosshair_materials.add(CrosshairMaterial {
+                    color: Color::DARK_GRAY.rgba_to_vec4(),
+                }),
+                ..default()
+            });
+            commands.spawn(MaterialNodeBundle {
+                style: Style {
+                    position_type: PositionType::Absolute,
+                    width: Val::VMin(0.4),
+                    height: Val::VMin(0.4),
+                    top: Val::VMin(-0.2),
+                    left: Val::VMin(-0.2),
+                    ..default()
+                },
+                material: crosshair_materials.add(CrosshairMaterial {
+                    color: Color::WHITE.rgba_to_vec4(),
+                }),
+                ..default()
+            });
+        });
+
     commands.spawn((
         Model::new("test_scene.glb"),
         RigidBody::Fixed,

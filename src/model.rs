@@ -24,11 +24,11 @@ pub struct ModelPlugin;
 
 impl Plugin for ModelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(First, resolve).add_systems(First, res);
+        app.add_systems(First, load).add_systems(First, resolve);
     }
 }
 
-fn resolve(server: Res<AssetServer>, mut commands: Commands, models_q: Query<(Entity, &Model)>) {
+fn load(server: Res<AssetServer>, mut commands: Commands, models_q: Query<(Entity, &Model)>) {
     for (entity, model) in models_q.iter() {
         let src = model.src.clone();
 
@@ -39,7 +39,7 @@ fn resolve(server: Res<AssetServer>, mut commands: Commands, models_q: Query<(En
     }
 }
 
-fn res(
+fn resolve(
     gltf_res: Res<Assets<Gltf>>,
     nodes_res: Res<Assets<GltfNode>>,
     mut gltf_meshes_res: ResMut<Assets<GltfMesh>>,
