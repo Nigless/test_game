@@ -45,12 +45,6 @@ fn switch(
     for (entity, velocity, character_body) in entity_q.iter() {
         let is_moving = velocity.linvel.xz().length() > 0.01;
 
-        // standing: true,
-        // moving: false,
-        // rising: false,
-        // falling: false,
-        // crouching: false,
-
         if character_body.is_grounded && !input.crouching && !is_moving {
             commands
                 .entity(entity)

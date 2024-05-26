@@ -28,7 +28,6 @@ mod crouching_state;
 mod falling_state;
 mod moving_state;
 mod rising_state;
-mod running_state;
 mod standing_state;
 
 #[derive(Component)]
@@ -101,15 +100,7 @@ impl Plugin for GhostPlugin {
         .register_type::<Stats>()
         .add_systems(Startup, resolve)
         .add_systems(First, resolve)
-        .add_systems(
-            Update,
-            (
-                look_around.run_if(resource_changed::<Input>),
-                move_grounded,
-                move_falling,
-                respawn,
-            ),
-        );
+        .add_systems(Update, (look_around, move_grounded, move_falling, respawn));
     }
 }
 
@@ -156,16 +147,9 @@ fn respawn(
 
 fn look_around(
     input: Res<Input>,
-    mut window_q: Query<&mut Window>,
     mut entity_q: Query<(&mut Transform, &CameraController), (Without<Unresolved>, With<Control>)>,
     mut camera_q: Query<&mut Transform, (With<Camera>, Without<CameraController>)>,
 ) {
-    // let mut window = window_q.single_mut();
-    // let width = window.width();
-    // let height = window.height();
-    // window.set_cursor_position(Some(Vec2::new(width / 2., height / 2.)));
-    // window.cursor.visible = false;
-
     for (mut entity_transform, controller) in entity_q.iter_mut() {
         let mut camera_transform = camera_q
             .get_mut(controller.target)
@@ -174,7 +158,7 @@ fn look_around(
         let rotation =
             camera_transform.rotation * Quat::from_rotation_x(input.looking_around.y * 0.002);
 
-        if (rotation * Vec3::Y).y > 0.0 {
+        if (rotation * Vec3::Y).y >= 0.0 {
             camera_transform.rotation = rotation;
         }
 
