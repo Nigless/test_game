@@ -53,10 +53,7 @@ fn main() {
 }
 
 #[derive(AsBindGroup, Asset, TypePath, Debug, Clone)]
-struct CrosshairMaterial {
-    #[uniform(0)]
-    color: Vec4,
-}
+struct CrosshairMaterial {}
 
 impl UiMaterial for CrosshairMaterial {
     fn fragment_shader() -> ShaderRef {
@@ -78,29 +75,13 @@ fn startup(mut commands: Commands, mut crosshair_materials: ResMut<Assets<Crossh
             commands.spawn(MaterialNodeBundle {
                 style: Style {
                     position_type: PositionType::Absolute,
-                    width: Val::VMin(0.7),
-                    height: Val::VMin(0.7),
-                    top: Val::VMin(-0.35),
-                    left: Val::VMin(-0.35),
+                    width: Val::VMin(1.0),
+                    height: Val::VMin(1.0),
+                    top: Val::VMin(-0.5),
+                    left: Val::VMin(-0.5),
                     ..default()
                 },
-                material: crosshair_materials.add(CrosshairMaterial {
-                    color: Color::DARK_GRAY.rgba_to_vec4(),
-                }),
-                ..default()
-            });
-            commands.spawn(MaterialNodeBundle {
-                style: Style {
-                    position_type: PositionType::Absolute,
-                    width: Val::VMin(0.4),
-                    height: Val::VMin(0.4),
-                    top: Val::VMin(-0.2),
-                    left: Val::VMin(-0.2),
-                    ..default()
-                },
-                material: crosshair_materials.add(CrosshairMaterial {
-                    color: Color::WHITE.rgba_to_vec4(),
-                }),
+                material: crosshair_materials.add(CrosshairMaterial {}),
                 ..default()
             });
         });
