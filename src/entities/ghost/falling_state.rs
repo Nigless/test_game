@@ -21,7 +21,7 @@ use crate::{
 
 use super::{
     crouching_state::CrouchingState, moving_state::MovingState, rising_state::RisingState,
-    standing_state::StandingState, Stats,
+    standing_state::StandingState,
 };
 
 #[derive(Component, Reflect)]
@@ -45,27 +45,38 @@ fn switch(
     for (entity, velocity, character_body) in entity_q.iter() {
         let is_moving = velocity.linvel.xz().length() > 0.01;
 
+        if input.crouching {
+            commands
+                .entity(entity)
+                .remove::<FallingState>()
+                .insert(CrouchingState);
+
+            continue;
+        }
+
         if character_body.is_grounded {
-            commands.entity(entity).remove::<FallingState>();
+            if is_moving {
+                commands
+                    .entity(entity)
+                    .remove::<FallingState>()
+                    .insert(MovingState);
+
+                continue;
+            }
+
+            commands
+                .entity(entity)
+                .remove::<FallingState>()
+                .insert(StandingState);
+
+            continue;
         }
 
-        if !is_moving && !input.crouching {
-            commands.entity(entity).insert(StandingState);
-        }
-
-        if is_moving {
-            commands.entity(entity).insert(MovingState);
-        }
-
-        if !character_body.is_grounded && velocity.linvel.y > 0.01 {
+        if velocity.linvel.y > 0.01 {
             commands
                 .entity(entity)
                 .remove::<FallingState>()
                 .insert(RisingState);
-        }
-
-        if input.crouching {
-            commands.entity(entity).insert(CrouchingState);
         }
     }
 }

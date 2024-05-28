@@ -33,7 +33,7 @@ mod standing_state;
 #[derive(Component)]
 struct Unresolved;
 
-#[derive(Component, Reflect)]
+#[derive(Component, Default, Reflect)]
 #[reflect(Component)]
 struct Stats {
     pub walking_speed: f32,
@@ -43,20 +43,6 @@ struct Stats {
     pub jumping_high: f32,
     pub crouching_jump_high: f32,
     pub acceleration: f32,
-}
-
-impl Default for Stats {
-    fn default() -> Self {
-        Self {
-            walking_speed: 0.02,
-            running_speed: 0.04,
-            falling_speed: 0.01,
-            crouching_speed: 0.01,
-            jumping_high: 0.03,
-            crouching_jump_high: 0.02,
-            acceleration: 20.0,
-        }
-    }
 }
 
 #[derive(Bundle)]
@@ -100,7 +86,7 @@ impl Plugin for GhostPlugin {
         .register_type::<Stats>()
         .add_systems(Startup, resolve)
         .add_systems(First, resolve)
-        .add_systems(Update, (look_around, move_grounded, move_falling, respawn));
+        .add_systems(Update, (look_around, move_char, respawn));
     }
 }
 
@@ -166,7 +152,7 @@ fn look_around(
     }
 }
 
-fn move_grounded(
+fn move_char(
     time: Res<Time>,
     input: Res<Input>,
     mut entity_q: Query<
@@ -174,17 +160,33 @@ fn move_grounded(
             &mut Velocity,
             &Transform,
             &Stats,
+            &CharacterBody,
             Option<&StandingState>,
             Option<&MovingState>,
             Option<&CrouchingState>,
+            Option<&FallingState>,
+            Option<&RisingState>,
         ),
-        (With<Control>, Without<RisingState>, Without<FallingState>),
+        With<Control>,
     >,
 ) {
-    for (mut velocity, transform, stats, standing, moving, crouching) in entity_q.iter_mut() {
+    for (
+        mut velocity,
+        transform,
+        stats,
+        character_body,
+        standing,
+        moving,
+        crouching,
+        falling,
+        rising,
+    ) in entity_q.iter_mut()
+    {
         let standing = standing.is_some();
         let moving = moving.is_some();
         let crouching = crouching.is_some();
+        let falling = falling.is_some();
+        let rising = rising.is_some();
 
         let max_speed = if standing || moving {
             if input.running {
@@ -192,6 +194,8 @@ fn move_grounded(
             } else {
                 stats.walking_speed
             }
+        } else if falling || rising {
+            stats.falling_speed
         } else if crouching {
             stats.crouching_speed
         } else {
@@ -206,47 +210,36 @@ fn move_grounded(
                 .normalize_or_zero()
         };
 
-        let move_velocity = velocity.linvel.xz();
+        if character_body.is_grounded {
+            let move_velocity = velocity.linvel.xz();
 
-        let jump_high = if crouching {
-            stats.crouching_jump_high
-        } else {
-            stats.jumping_high
-        };
+            let jump_high = if crouching {
+                stats.crouching_jump_high
+            } else {
+                stats.jumping_high
+            };
 
-        if input.jumping {
-            velocity.linvel.y = jump_high;
+            if input.jumping {
+                velocity.linvel.y = jump_high;
+            }
+
+            let result = move_velocity.lerp(
+                direction * max_speed,
+                stats.acceleration * time.delta_seconds(),
+            );
+
+            velocity.linvel = Vec3::new(result.x, velocity.linvel.y, result.y);
+
+            continue;
         }
 
-        let result = move_velocity.lerp(
-            direction * max_speed,
-            stats.acceleration * time.delta_seconds(),
-        );
-
-        velocity.linvel = Vec3::new(result.x, velocity.linvel.y, result.y);
-
-        continue;
-    }
-}
-
-fn move_falling(
-    time: Res<Time>,
-    input: Res<Input>,
-    mut entity_q: Query<
-        (&mut Velocity, &Transform, &Stats),
-        (With<Control>, Or<(With<RisingState>, With<FallingState>)>),
-    >,
-) {
-    for (mut velocity, transform, stats) in entity_q.iter_mut() {
-        if input.moving == Vec2::ZERO {
-            return;
+        if direction == Vec2::ZERO {
+            continue;
         }
 
         let direction = (transform.rotation * Vec3::new(input.moving.x, 0.0, input.moving.y))
             .xz()
             .normalize_or_zero();
-
-        let max_speed = stats.falling_speed;
 
         let move_velocity = velocity.linvel.xz();
 

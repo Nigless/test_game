@@ -45,29 +45,37 @@ fn switch(
     for (entity, velocity, character_body) in entity_q.iter() {
         let is_moving = velocity.linvel.xz().length() > 0.01;
 
-        if character_body.is_grounded && !input.crouching && !is_moving {
+        if input.crouching {
+            commands
+                .entity(entity)
+                .remove::<RisingState>()
+                .insert(CrouchingState);
+
+            continue;
+        }
+
+        if character_body.is_grounded {
+            if is_moving {
+                commands
+                    .entity(entity)
+                    .remove::<RisingState>()
+                    .insert(MovingState);
+                continue;
+            }
+
             commands
                 .entity(entity)
                 .remove::<RisingState>()
                 .insert(StandingState);
+
+            continue;
         }
 
-        if character_body.is_grounded && !input.crouching && is_moving {
-            commands
-                .entity(entity)
-                .remove::<RisingState>()
-                .insert(MovingState);
-        }
-
-        if !character_body.is_grounded && velocity.linvel.y < -0.01 {
+        if velocity.linvel.y < -0.01 {
             commands
                 .entity(entity)
                 .remove::<RisingState>()
                 .insert(FallingState);
-        }
-
-        if input.crouching {
-            commands.entity(entity).insert(CrouchingState);
         }
     }
 }
