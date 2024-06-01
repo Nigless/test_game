@@ -4,6 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bevy::ecs::reflect;
 use bevy::scene::ron::value;
+use bevy::transform::commands;
 use bevy::transform::components::Transform;
 use bevy::utils::hashbrown::HashMap;
 use bevy::{animation, prelude::*};
@@ -30,14 +31,14 @@ impl Keyframe {
 #[derive(Asset, Reflect, Clone)]
 #[reflect_value]
 pub struct Animation {
-    properties: HashMap<String, Vec<Keyframe>>,
+    nodes: HashMap<String, HashMap<String, Vec<Keyframe>>>,
     duration: Duration,
 }
 
 impl Animation {
     pub fn new(duration: u64) -> Self {
         Self {
-            properties: default(),
+            nodes: default(),
             duration: Duration::from_millis(duration),
         }
     }
@@ -48,8 +49,18 @@ impl Animation {
         self
     }
 
+    pub fn with_node(mut self, name: &str) -> Self {
+        self.nodes.insert(name.to_owned(), HashMap::new());
+
+        self
+    }
+
     pub fn with_property(mut self, name: &str, keyframes: Vec<Keyframe>) -> Self {
-        self.properties.insert(name.to_owned(), keyframes);
+        self.nodes
+            .values_mut()
+            .last()
+            .unwrap()
+            .insert(name.to_owned(), keyframes);
 
         self
     }
@@ -81,7 +92,7 @@ impl From<&Handle<Animation>> for Sequence {
 impl From<Handle<Animation>> for Sequence {
     fn from(animation: Handle<Animation>) -> Self {
         Self {
-            weight: default(),
+            weight: 1.0,
             playing: default(),
             start_time: default(),
             transition: default(),
@@ -99,6 +110,7 @@ impl Sequence {
 
     pub fn playing(mut self) -> Self {
         self.playing = true;
+        self.start_time = date_now();
 
         self
     }
@@ -112,7 +124,7 @@ impl Sequence {
         self.playing = false
     }
 
-    fn output(&self, assets: &Res<Assets<Animation>>) -> HashMap<String, f32> {
+    fn output(&self, assets: &Res<Assets<Animation>>) -> HashMap<String, HashMap<String, f32>> {
         let animation = assets.get(&self.animation).unwrap();
 
         let time_now = date_now();
@@ -126,67 +138,74 @@ impl Sequence {
             } as u64);
         }
 
-        let mut result = HashMap::<String, f32>::new();
+        let mut nods: HashMap<String, HashMap<String, f32>> = HashMap::new();
 
-        let mut insert =
-            |property: &str, value: f32| result.insert(property.to_owned(), value * self.weight);
+        for (node, properties) in animation.nodes.iter() {
+            let mut result: HashMap<String, f32> = HashMap::new();
 
-        for (property, keyframes) in animation.properties.iter() {
-            let from = keyframes.first();
+            let mut insert = |property: &str, value: f32| {
+                result.insert(property.to_owned(), value * self.weight)
+            };
 
-            if from.is_none() {
-                continue;
-            }
+            for (property, keyframes) in properties.iter() {
+                let from = keyframes.first();
 
-            let mut from = from.unwrap();
-
-            if keyframes.len() == 1 {
-                insert(property, from.value);
-                continue;
-            }
-
-            let mut to = from;
-
-            for keyframe in keyframes.iter() {
-                if keyframe.timestamp < timestamp {
-                    from = keyframe;
-                } else {
-                    to = keyframe;
-                    break;
+                if from.is_none() {
+                    continue;
                 }
+
+                let mut from = from.unwrap();
+
+                if keyframes.len() == 1 {
+                    insert(property, from.value);
+                    continue;
+                }
+
+                let mut to = from;
+
+                for keyframe in keyframes.iter() {
+                    if keyframe.timestamp < timestamp {
+                        from = keyframe;
+                    } else {
+                        to = keyframe;
+                        break;
+                    }
+                }
+
+                if to.timestamp == timestamp {
+                    insert(property, to.value);
+                    continue;
+                }
+
+                let mut from = from.clone();
+                let mut to = to.clone();
+
+                if to.timestamp < from.timestamp {
+                    to.timestamp = animation.duration + to.timestamp;
+                }
+
+                if !from.timestamp.is_zero() {
+                    from.timestamp = Duration::ZERO;
+                    to.timestamp -= from.timestamp;
+                }
+
+                let proportion = timestamp.as_millis() as f32 / to.timestamp.as_millis() as f32;
+
+                let value = from.value * (1.0 - proportion) + to.value * proportion;
+
+                insert(property, value);
             }
-
-            if to.timestamp == timestamp {
-                insert(property, to.value);
-                continue;
-            }
-
-            let mut from = from.clone();
-            let mut to = to.clone();
-
-            if to.timestamp < from.timestamp {
-                to.timestamp = animation.duration + to.timestamp;
-            }
-
-            if !from.timestamp.is_zero() {
-                from.timestamp = Duration::ZERO;
-                to.timestamp -= from.timestamp;
-            }
-
-            let proportion = timestamp.as_millis() as f32 / to.timestamp.as_millis() as f32;
-
-            let value = from.value * (1.0 - proportion) + to.value * proportion;
-
-            insert(property, value);
+            nods.insert(node.to_owned(), result);
         }
 
-        return result;
+        return nods;
     }
 }
 
 #[derive(Component, Default, Reflect)]
 #[reflect(Component)]
 pub struct AnimationSequencer {
+    entities: HashMap<String, Entity>,
     sequences: HashMap<String, Sequence>,
 }
 
@@ -200,6 +219,14 @@ impl AnimationSequencer {
 
     pub fn with_sequence(mut self, name: &str, sequence: Sequence) -> Self {
         self.sequences.insert(name.to_owned(), sequence);
+
+        self
+    }
+
+    pub fn playing_all(mut self) -> Self {
+        self.sequences
+            .values_mut()
+            .for_each(|sequence| sequence.start());
 
         self
     }
@@ -256,26 +283,49 @@ impl AnimationSequencer {
         }
     }
 
-    fn output(&mut self, assets: &Res<Assets<Animation>>) -> HashMap<String, f32> {
+    fn output(&mut self, assets: &Res<Assets<Animation>>) -> HashMap<Entity, HashMap<String, f32>> {
         self.update_transitions();
 
-        let mut result = HashMap::<String, f32>::new();
+        let mut nods: HashMap<Entity, HashMap<String, f32>> = HashMap::new();
 
         for (animation_name, sequence) in self.sequences.iter() {
             if !sequence.playing {
                 continue;
             }
 
-            for (property, value) in sequence.output(&assets).iter() {
-                let value: f32 = result
-                    .get(property)
-                    .map_or(*value, |collector| *collector + *value);
+            for (node, properties) in sequence.output(&assets).iter() {
+                let node = self.entities.get(node).unwrap();
 
-                result.insert(property.to_owned(), value);
+                let mut result: HashMap<String, f32> = HashMap::new();
+
+                for (property, value) in properties {
+                    let value: f32 = nods
+                        .get(node)
+                        .map_or(None, |node| node.get(property))
+                        .map_or(*value, |collector| *collector + *value);
+
+                    result.insert(property.to_owned(), value);
+                }
+                nods.insert(node.to_owned(), result);
             }
         }
 
-        return result;
+        return nods;
+    }
+}
+
+impl From<&HashMap<String, Handle<Animation>>> for AnimationSequencer {
+    fn from(animation_set: &HashMap<String, Handle<Animation>>) -> Self {
+        let mut sequences: HashMap<String, Sequence> = HashMap::new();
+
+        for (name, asset) in animation_set.iter() {
+            sequences.insert(name.to_owned(), Sequence::from(asset));
+        }
+
+        AnimationSequencer {
+            entities: default(),
+            sequences,
+        }
     }
 }
 
@@ -288,27 +338,74 @@ impl Plugin for AnimationSequencerPlugin {
             .register_asset_reflect::<Animation>()
             .insert_resource(Assets::<Animation>::default())
             .register_type::<AnimationSequencer>()
+            .add_systems(First, resolve)
             .add_systems(Update, update);
+    }
+}
+
+fn collect_entities(
+    entity: &Entity,
+    query: &Query<(&Name, Option<&Children>)>,
+    collector: &mut HashMap<String, Entity>,
+) {
+    if let Ok((name, children)) = query.get(entity.to_owned()) {
+        collector.insert(name.into(), entity.to_owned());
+
+        children.map(|children| {
+            children
+                .iter()
+                .for_each(|child| collect_entities(child, query, collector));
+        });
+    }
+}
+
+fn resolve(
+    mut entity_q: Query<(&mut AnimationSequencer, &Children), Added<AnimationSequencer>>,
+    node_q: Query<(&Name, Option<&Children>)>,
+) {
+    for (mut sequencer, children) in entity_q.iter_mut() {
+        let mut nodes: HashMap<String, Entity> = HashMap::new();
+
+        for child in children.iter() {
+            collect_entities(child, &node_q, &mut nodes)
+        }
+
+        sequencer.entities = nodes
     }
 }
 
 fn update(
     assets: Res<Assets<Animation>>,
-    mut entity_q: Query<(&mut AnimationSequencer, Option<&mut Transform>)>,
+    mut entity_q: Query<&mut AnimationSequencer>,
+    mut node_q: Query<Option<&mut Transform>, Without<AnimationSequencer>>,
 ) {
-    for (mut sequencer, mut transform) in entity_q.iter_mut() {
-        for (property, value) in sequencer.output(&assets).iter() {
-            transform.as_mut().map(|transform| {
-                if property == "transform.scale.x" {
-                    transform.scale.x = value.clone();
-                };
-                if property == "transform.scale.y" {
-                    transform.scale.y = value.clone();
-                };
-                if property == "transform.scale.z" {
-                    transform.scale.z = value.clone();
-                };
-            });
+    for mut sequencer in entity_q.iter_mut() {
+        for (entity, properties) in sequencer.output(&assets).iter() {
+            if let Ok(mut transform) = node_q.get_mut(entity.to_owned()) {
+                for (property, value) in properties.iter() {
+                    transform.as_mut().map(|transform| {
+                        if property == "transform.scale.x" {
+                            transform.scale.x = value.clone();
+                        };
+                        if property == "transform.scale.y" {
+                            transform.scale.y = value.clone();
+                        };
+                        if property == "transform.scale.z" {
+                            transform.scale.z = value.clone();
+                        };
+
+                        if property == "transform.translation.x" {
+                            transform.translation.x = value.clone();
+                        };
+                        if property == "transform.translation.y" {
+                            transform.translation.y = value.clone();
+                        };
+                        if property == "transform.translation.z" {
+                            transform.translation.z = value.clone();
+                        };
+                    });
+                }
+            }
         }
     }
 }

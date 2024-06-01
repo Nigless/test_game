@@ -108,10 +108,20 @@ impl Plugin for GhostPlugin {
 }
 
 fn startup(mut commands: Commands, mut animations: ResMut<Assets<Animation>>) {
-    let crouching =
-        Animation::new(0).with_property("transform.scale.y", vec![Keyframe::new(0, 0.5)]);
-    let standing =
-        Animation::new(0).with_property("transform.scale.y", vec![Keyframe::new(0, 1.0)]);
+    let crouching = Animation::new(0)
+        .with_node("collider")
+        .with_property("transform.scale.y", vec![Keyframe::new(0, 0.5)])
+        .with_node("camera")
+        .with_property(
+            "transform.translation.y",
+            vec![Keyframe::new(0, (0.9 - 0.2) * 0.5)],
+        );
+
+    let standing = Animation::new(0)
+        .with_node("collider")
+        .with_property("transform.scale.y", vec![Keyframe::new(0, 1.0)])
+        .with_node("camera")
+        .with_property("transform.translation.y", vec![Keyframe::new(0, 0.9 - 0.2)]);
 
     commands.insert_resource(
         Animations::default()
@@ -127,14 +137,17 @@ fn resolve(
 ) {
     for entity in entity_q.iter_mut() {
         let camera = commands
-            .spawn(Camera3dBundle {
-                transform: Transform::from_xyz(0.0, 0.9 - 0.2, 0.0),
-                projection: Projection::Perspective(PerspectiveProjection {
-                    fov: consts::PI / 2.0,
+            .spawn((
+                Name::new("camera"),
+                Camera3dBundle {
+                    transform: Transform::from_xyz(0.0, 0.9 - 0.2, 0.0),
+                    projection: Projection::Perspective(PerspectiveProjection {
+                        fov: consts::PI / 2.0,
+                        ..default()
+                    }),
                     ..default()
-                }),
-                ..default()
-            })
+                },
+            ))
             .id();
 
         let collider = commands
@@ -142,26 +155,17 @@ fn resolve(
                 Name::new("collider"),
                 Collider::capsule_y(0.9, 0.2),
                 TransformBundle::default(),
-                AnimationSequencer::default()
-                    .with_sequence(
-                        "standing",
-                        Sequence::from(animations.get("standing").unwrap())
-                            .with_weight(1.0)
-                            .playing(),
-                    )
-                    .with_sequence(
-                        "crouching",
-                        Sequence::from(animations.get("crouching").unwrap())
-                            .with_weight(0.0)
-                            .playing(),
-                    ),
             ))
             .id();
 
         commands
             .entity(entity)
             .remove::<Unresolved>()
-            .insert((CameraController::new(camera), CharacterBody::new(collider)))
+            .insert((
+                CameraController::new(camera),
+                CharacterBody::new(collider),
+                AnimationSequencer::from(&animations.data).playing_all(),
+            ))
             .add_child(camera)
             .add_child(collider);
     }
@@ -245,21 +249,17 @@ fn update_stats(mut entity_q: Query<(&GhostState, &mut Stats), Changed<GhostStat
 }
 
 fn update_animation(
-    mut commands: Commands,
-    entity_q: Query<(&GhostState, &CharacterBody), Changed<GhostState>>,
-    mut collider_q: Query<(Entity, &mut AnimationSequencer)>,
+    mut entity_q: Query<(&GhostState, &mut AnimationSequencer), Changed<GhostState>>,
 ) {
-    for (state, character_body) in entity_q.iter() {
-        let (entity, mut sequencer) = collider_q.get_mut(character_body.collider).unwrap();
-
+    for (state, mut sequencer) in entity_q.iter_mut() {
         match state {
             GhostState::Crouching => {
-                sequencer.add_transition("crouching", 1.0, 300);
-                sequencer.add_transition("standing", 0.0, 300);
+                sequencer.add_transition("crouching", 1.0, 100);
+                sequencer.add_transition("standing", 0.0, 100);
             }
             _ => {
-                sequencer.add_transition("crouching", 0.0, 300);
-                sequencer.add_transition("standing", 1.0, 300);
+                sequencer.add_transition("crouching", 0.0, 100);
+                sequencer.add_transition("standing", 1.0, 100);
             }
         };
     }
