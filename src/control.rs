@@ -38,7 +38,7 @@ impl Default for Bindings {
     }
 }
 
-#[derive(Resource, Default, Reflect)]
+#[derive(Resource, Default, Reflect, PartialEq)]
 #[reflect(Resource)]
 pub struct Input {
     pub moving: Vec2,
@@ -58,7 +58,7 @@ impl Plugin for ControlPlugin {
             .insert_resource(Input::default())
             .register_type::<Bindings>()
             .insert_resource(Bindings::default())
-            .add_systems(PreUpdate, update);
+            .add_systems(First, update);
     }
 }
 
@@ -68,33 +68,35 @@ fn update(
     controls: Res<Bindings>,
     mut input: ResMut<Input>,
 ) {
-    input.looking_around = Vec2::ZERO;
+    let mut result = Input::default();
 
     for event in mouse.read().into_iter() {
-        input.looking_around += Vec2::new(-event.delta.x, -event.delta.y);
+        result.looking_around += Vec2::new(-event.delta.x, -event.delta.y);
     }
 
-    input.moving = Vec2::ZERO;
-
     if keyboard.pressed(controls.move_left) {
-        input.moving += Vec2::new(-1.0, 0.0);
+        result.moving += Vec2::new(-1.0, 0.0);
     }
 
     if keyboard.pressed(controls.move_right) {
-        input.moving += Vec2::new(1.0, 0.0);
+        result.moving += Vec2::new(1.0, 0.0);
     }
 
     if keyboard.pressed(controls.move_forward) {
-        input.moving += Vec2::new(0.0, -1.0);
+        result.moving += Vec2::new(0.0, -1.0);
     }
 
     if keyboard.pressed(controls.move_backward) {
-        input.moving += Vec2::new(0.0, 1.0);
+        result.moving += Vec2::new(0.0, 1.0);
     }
 
-    input.jumping = keyboard.just_pressed(controls.jump);
-    input.running = keyboard.pressed(controls.run);
-    input.crouching = keyboard.pressed(controls.crouch);
+    result.jumping = keyboard.just_pressed(controls.jump);
+    result.running = keyboard.pressed(controls.run);
+    result.crouching = keyboard.pressed(controls.crouch);
 
-    input.pausing = keyboard.just_pressed(controls.pause);
+    result.pausing = keyboard.just_pressed(controls.pause);
+
+    if *input != result {
+        *input = result;
+    }
 }
