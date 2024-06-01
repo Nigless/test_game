@@ -13,6 +13,12 @@ pub struct CameraController {
     pub target: Entity,
 }
 
+impl CameraController {
+    pub fn new(target: Entity) -> Self {
+        Self { target }
+    }
+}
+
 pub struct CameraControllerPlugin;
 
 impl Plugin for CameraControllerPlugin {

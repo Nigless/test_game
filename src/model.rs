@@ -68,7 +68,7 @@ fn resolve(
 
 fn resolve_node(
     parent: &Entity,
-    mut commands: &mut Commands,
+    commands: &mut Commands,
     gltf_meshes_res: &mut ResMut<Assets<GltfMesh>>,
     meshes_res: &mut ResMut<Assets<Mesh>>,
     node: &GltfNode,

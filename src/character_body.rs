@@ -16,14 +16,16 @@ use bevy_rapier3d::{
 #[reflect(Component)]
 pub struct CharacterBody {
     pub is_grounded: bool,
-    pub collision: Option<Collision>,
+    pub normal: Vec3,
+    pub collider: Entity,
 }
 
-impl Default for CharacterBody {
-    fn default() -> Self {
+impl CharacterBody {
+    pub fn new(collider: Entity) -> Self {
         Self {
             is_grounded: false,
-            collision: None,
+            normal: Vec3::ZERO,
+            collider,
         }
     }
 }
@@ -37,12 +39,6 @@ impl Plugin for CharacterBodyPlugin {
     }
 }
 
-#[derive(Reflect)]
-pub struct Collision {
-    pub velocity: Vec3,
-    pub normal: Vec3,
-}
-
 fn collide_and_slide(
     rapier: &Res<RapierContext>,
     rotation: Quat,
@@ -50,7 +46,7 @@ fn collide_and_slide(
     entity: Entity,
     velocity: Vec3,
     position: Vec3,
-) -> Option<Collision> {
+) -> Vec3 {
     let skin_width = 0.1;
 
     let vector_cast = velocity.normalize_or_zero() * (velocity.length() + skin_width);
@@ -80,46 +76,36 @@ fn collide_and_slide(
 
         let vector_slide = velocity.reject_from(normal);
 
-        if let Some(collision) = collide_and_slide(
-            rapier,
-            rotation,
-            collider,
-            entity,
-            vector_slide,
-            position + vector_to_surface,
-        ) {
-            return Some(Collision {
-                velocity: vector_to_surface + collision.velocity,
-                normal: collision.normal,
-            });
-        }
-
-        return Some(Collision {
-            velocity: vector_to_surface + vector_slide,
-            normal: normal,
-        });
+        return vector_to_surface
+            + collide_and_slide(
+                rapier,
+                rotation,
+                collider,
+                entity,
+                vector_slide,
+                position + vector_to_surface,
+            );
     };
 
-    return None;
+    return velocity;
 }
 
 fn update(
-    time: Res<Time>,
     rapier: Res<RapierContext>,
     rapier_config: Res<RapierConfiguration>,
-    mut entity_q: Query<(
-        Entity,
-        &mut Velocity,
-        &mut Transform,
-        &Collider,
-        &mut CharacterBody,
-    )>,
+    mut entity_q: Query<(&mut Velocity, &mut Transform, &mut CharacterBody)>,
+    collider_q: Query<&Collider, Without<CharacterBody>>,
 ) {
-    for (entity, mut velocity, mut transform, collider, mut character_body) in entity_q.iter_mut() {
+    for (mut velocity, mut transform, mut character_body) in entity_q.iter_mut() {
+        let collider = collider_q
+            .get(character_body.collider)
+            .expect("CharacterBody collider doesn't exist or doesn't have a Collider component");
+
         let rotation = transform.rotation;
         let position = transform.translation;
 
         character_body.is_grounded = false;
+        character_body.normal = Vec3::ZERO;
 
         rapier
             .cast_shape(
@@ -129,33 +115,25 @@ fn update(
                 collider,
                 1.0,
                 true,
-                QueryFilter::new().exclude_collider(entity),
+                QueryFilter::new().exclude_collider(character_body.collider),
             )
-            .map_or(None, |(_, hit)| {
-                hit.details
-                    .map(|details| details.normal1.normalize_or_zero())
-            })
+            .map_or(None, |(_, hit)| hit.details)
+            .map(|details| details.normal1.normalize_or_zero())
             .map(|normal| {
+                character_body.normal = normal;
                 character_body.is_grounded =
-                    rapier_config.gravity.angle_between(normal) > consts::PI * 0.75;
+                    rapier_config.gravity.angle_between(normal) > consts::PI * 0.74;
             });
 
-        if let Some(collision) = collide_and_slide(
+        velocity.linvel = collide_and_slide(
             &rapier,
             rotation,
             collider,
-            entity,
+            character_body.collider,
             velocity.linvel,
             position,
-        ) {
-            velocity.linvel = collision.velocity;
-            transform.translation += velocity.linvel;
+        );
 
-            character_body.collision = Some(collision);
-            continue;
-        }
-
-        character_body.collision = None;
         transform.translation += velocity.linvel;
     }
 }

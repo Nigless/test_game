@@ -1,5 +1,6 @@
 use std::f32::consts;
 
+use animation_sequencer::AnimationSequencerPlugin;
 use bevy::{
     prelude::*,
     render::{
@@ -23,6 +24,7 @@ use entities::{
     traffic_cone::TrafficCone,
 };
 use model::{Model, ModelPlugin};
+mod animation_sequencer;
 mod character_body;
 
 use crate::entities::package::Package;
@@ -33,7 +35,7 @@ fn main() {
             DefaultPlugins,
             WorldInspectorPlugin::new(),
             RapierPhysicsPlugin::<NoUserData>::default(),
-            // RapierDebugRenderPlugin::default(),
+            RapierDebugRenderPlugin::default(),
             UiMaterialPlugin::<CrosshairMaterial>::default(),
         ))
         .add_plugins((
@@ -42,6 +44,7 @@ fn main() {
             CameraControllerPlugin,
             ControlPlugin,
             CharacterBodyPlugin,
+            AnimationSequencerPlugin,
         ))
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
@@ -72,13 +75,15 @@ fn startup(mut commands: Commands, mut crosshair_materials: ResMut<Assets<Crossh
             ..default()
         })
         .with_children(|commands| {
+            let size = 1.0;
+
             commands.spawn(MaterialNodeBundle {
                 style: Style {
                     position_type: PositionType::Absolute,
-                    width: Val::VMin(1.0),
-                    height: Val::VMin(1.0),
-                    top: Val::VMin(-0.5),
-                    left: Val::VMin(-0.5),
+                    width: Val::VMin(size),
+                    height: Val::VMin(size),
+                    top: Val::VMin(size / -2.0),
+                    left: Val::VMin(size / -2.0),
                     ..default()
                 },
                 material: crosshair_materials.add(CrosshairMaterial {}),
