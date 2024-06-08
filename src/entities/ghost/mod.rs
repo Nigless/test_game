@@ -11,6 +11,7 @@ use bevy::utils::HashMap;
 
 use bevy_rapier3d::dynamics::{GravityScale, Velocity};
 
+use bevy_rapier3d::na::ComplexField;
 use bevy_rapier3d::plugin::RapierConfiguration;
 use bevy_rapier3d::prelude::Collider;
 
@@ -277,22 +278,23 @@ fn move_standing(
 
         if control.is_some() {
             if input.jumping {
-                let vector_jump = rapier_config.gravity.normalize_or_zero() * -stats.jumping_high;
+                let mut vector_jump =
+                    rapier_config.gravity.normalize_or_zero() * -stats.jumping_high;
 
-                let vertical_speed = velocity.linvel.dot(-rapier_config.gravity);
+                vector_jump = (vector_jump + normal * stats.jumping_high * 0.1).normalize_or_zero()
+                    * vector_jump.length();
 
-                if vertical_speed <= 0.0 {
+                let vertical_speed = velocity.linvel.dot(vector_jump.normalize_or_zero());
+
+                if vertical_speed.abs() <= 0.0001 {
                     velocity.linvel += vector_jump;
                     continue;
                 }
 
                 if vertical_speed <= stats.jumping_high {
-                    velocity.linvel =
-                        velocity.linvel.reject_from(rapier_config.gravity) + vector_jump;
+                    velocity.linvel = velocity.linvel.reject_from(vector_jump) + vector_jump;
                     continue;
                 }
-
-                velocity.linvel += normal * stats.jumping_high * 0.3;
 
                 continue;
             }
