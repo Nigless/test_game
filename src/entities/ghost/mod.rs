@@ -276,10 +276,30 @@ fn move_standing(
         let mut direction_along_surface = Vec3::ZERO;
 
         if control.is_some() {
+            if input.jumping {
+                let vector_jump = rapier_config.gravity.normalize_or_zero() * -stats.jumping_high;
+
+                let vertical_speed = velocity.linvel.dot(-rapier_config.gravity);
+
+                if vertical_speed <= 0.0 {
+                    velocity.linvel += vector_jump;
+                    continue;
+                }
+
+                if vertical_speed <= stats.jumping_high {
+                    velocity.linvel =
+                        velocity.linvel.reject_from(rapier_config.gravity) + vector_jump;
+                    continue;
+                }
+
+                velocity.linvel += normal * stats.jumping_high * 0.3;
+
+                continue;
+            }
+
             direction_along_surface = (transform.rotation
-                * Vec3::new(input.moving.x, 0.0, input.moving.y))
-            .reject_from(normal)
-            .normalize_or_zero();
+                * Vec3::new(input.moving.y, 0.0, -input.moving.x).normalize_or_zero())
+            .cross(normal);
         }
 
         let velocity_along_surface = velocity.linvel.reject_from(normal);
@@ -290,10 +310,6 @@ fn move_standing(
         );
 
         velocity.linvel = vector_along_surface + velocity.linvel.project_onto(normal);
-
-        if control.is_some() && input.jumping {
-            velocity.linvel += rapier_config.gravity.normalize_or_zero() * -stats.jumping_high;
-        }
 
         continue;
     }
