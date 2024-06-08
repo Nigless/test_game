@@ -1,4 +1,4 @@
-use bevy_rapier3d::dynamics::{GravityScale, RigidBody, Velocity};
+use bevy_rapier3d::dynamics::{RigidBody, Velocity};
 
 use bevy_rapier3d::prelude::Collider;
 
