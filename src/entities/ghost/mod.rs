@@ -1,34 +1,39 @@
 use std::f32::consts;
-use std::fmt::Display;
-use std::ops::Deref;
-use std::slice::Windows;
-use std::time::Duration;
 
-use crate::animation_sequencer::{Animation, AnimationSequencer, Keyframe, Sequence};
-use crate::camera_controller::{self, CameraController};
-use crate::character_body::{self, CharacterBody};
-use crate::control::{Bindings, Control, Input};
+use crate::animation_sequencer::{
+    Animation, AnimationSequencer, AnimationSequencerSystems, Target,
+};
+use crate::camera_controller::CameraController;
+use crate::character_body::{CharacterBody, CharacterBodySystems};
+use crate::control::{Control, Input};
 
-use bevy::log::tracing_subscriber::filter;
-use bevy::scene::ron::value;
 use bevy::utils::HashMap;
-use bevy::{ecs::reflect, input::mouse::MouseMotion};
-use bevy_rapier3d::control::{self, CharacterLength};
-use bevy_rapier3d::dynamics::{GravityScale, RigidBody, Velocity};
-use bevy_rapier3d::geometry::RapierColliderHandle;
-use bevy_rapier3d::na::Isometry;
-use bevy_rapier3d::pipeline::QueryFilter;
-use bevy_rapier3d::plugin::{RapierConfiguration, RapierContext};
+
+use bevy_rapier3d::dynamics::{GravityScale, Velocity};
+
+use bevy_rapier3d::plugin::RapierConfiguration;
 use bevy_rapier3d::prelude::Collider;
 
-use bevy::{prelude::*, transform};
-use bevy_rapier3d::prelude::LockedAxes;
-use bevy_rapier3d::rapier::control::KinematicCharacterController;
+use bevy::prelude::*;
+
+use crouching_falling_state::{CrouchingFallingState, CrouchingFallingStatePlugin};
+use crouching_standing_state::{CrouchingStandingState, CrouchingStandingStatePlugin};
+use falling_state::{FallingState, FallingStatePlugin};
+use moving_state::{MovingState, MovingStatePlugin};
+use running_state::{RunningState, RunningStatePlugin};
+use standing_state::{StandingState, StandingStatePlugin};
+
+mod crouching_falling_state;
+mod crouching_standing_state;
+mod falling_state;
+mod moving_state;
+mod running_state;
+mod standing_state;
 
 #[derive(Component, Default)]
 struct Unresolved;
 
-#[derive(Component, Default, Reflect, PartialEq)]
+#[derive(Component, Reflect, PartialEq)]
 #[reflect(Component)]
 struct Stats {
     pub moving_speed: f32,
@@ -36,25 +41,13 @@ struct Stats {
     pub acceleration: f32,
 }
 
-#[derive(Component, Default, Reflect, Debug, PartialEq)]
-#[reflect(Component)]
-pub enum GhostState {
-    #[default]
-    Standing,
-    Moving,
-    Rising,
-    Falling,
-    Crouching,
-    Running,
-}
-
-impl GhostState {
-    fn update(&mut self, state: GhostState) {
-        if *self == state {
-            return;
+impl Default for Stats {
+    fn default() -> Self {
+        Self {
+            moving_speed: 0.025,
+            jumping_high: 0.03,
+            acceleration: 10.0,
         }
-
-        *self = state
     }
 }
 
@@ -75,59 +68,103 @@ impl Animations {
     }
 }
 
+pub const COLLIDER_RADIUS: f32 = 0.3;
+pub const COLLIDER_HALF_HEIGHT: f32 = 1.0 - COLLIDER_RADIUS;
+pub const COLLIDER_CROUCHING_HALF_HEIGHT: f32 = COLLIDER_HALF_HEIGHT * 0.4;
+
 #[derive(Bundle, Default)]
 pub struct Ghost {
     unresolved: Unresolved,
     name: Name,
-    state: GhostState,
+    state: StandingState,
     stats: Stats,
     transform: TransformBundle,
     velocity: Velocity,
+    gravity: GravityScale,
 }
 
 impl Ghost {
     pub fn new() -> Self {
         Self {
             name: Name::new("Ghost"),
+            gravity: GravityScale(1.0),
             ..default()
         }
     }
+}
+
+#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
+pub enum GhostSystems {
+    Startup,
+    Resolve,
+    Switch,
+    Exit,
+    Enter,
+    Update,
 }
 
 pub struct GhostPlugin;
 
 impl Plugin for GhostPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Stats>()
-            .register_type::<GhostState>()
-            .add_systems(Startup, (startup.before(resolve), resolve))
-            .add_systems(First, resolve)
-            .add_systems(Update, (look_around, move_character, respawn))
-            .add_systems(PostUpdate, (update_state, update_stats, update_animation));
+        app.add_plugins(CrouchingFallingStatePlugin)
+            .add_plugins(CrouchingStandingStatePlugin)
+            .add_plugins(FallingStatePlugin)
+            .add_plugins(MovingStatePlugin)
+            .add_plugins(StandingStatePlugin)
+            .add_plugins(RunningStatePlugin)
+            .register_type::<Stats>()
+            .configure_sets(Startup, GhostSystems::Startup)
+            .add_systems(Startup, startup.in_set(GhostSystems::Startup))
+            .configure_sets(
+                PreUpdate,
+                (
+                    GhostSystems::Resolve,
+                    GhostSystems::Switch,
+                    GhostSystems::Exit,
+                    GhostSystems::Enter,
+                    GhostSystems::Update,
+                )
+                    .chain(),
+            )
+            .add_systems(
+                PreUpdate,
+                (
+                    resolve.in_set(GhostSystems::Resolve),
+                    (
+                        look_around,
+                        respawn,
+                        move_standing,
+                        move_falling,
+                        update_head_position,
+                    )
+                        .in_set(GhostSystems::Update),
+                ),
+            );
     }
 }
 
 fn startup(mut commands: Commands, mut animations: ResMut<Assets<Animation>>) {
-    let crouching = Animation::new(0)
-        .with_node("collider")
-        .with_property("transform.scale.y", vec![Keyframe::new(0, 0.5)])
-        .with_node("camera")
-        .with_property(
-            "transform.translation.y",
-            vec![Keyframe::new(0, (0.9 - 0.2) * 0.5)],
-        );
-
-    let standing = Animation::new(0)
-        .with_node("collider")
-        .with_property("transform.scale.y", vec![Keyframe::new(0, 1.0)])
-        .with_node("camera")
-        .with_property("transform.translation.y", vec![Keyframe::new(0, 0.9 - 0.2)]);
-
-    commands.insert_resource(
-        Animations::default()
-            .with_animation("crouching", animations.add(crouching))
-            .with_animation("standing", animations.add(standing)),
+    let walking = Animation::new(1600).with_target(
+        Target::new("camera")
+            .with_property(
+                "transform.rotation.x",
+                vec![
+                    (0, -0.002),
+                    (200, 0.002),
+                    (400, -0.002),
+                    (600, 0.002),
+                    (800, -0.002),
+                    (1000, 0.002),
+                    (1200, -0.002),
+                    (1400, 0.002),
+                ],
+            )
+            .with_property("transform.rotation.y", vec![(400, -0.006), (1200, 0.006)]),
     );
+
+    commands
+        .insert_resource(Animations::default().with_animation("walking", animations.add(walking)));
 }
 
 fn resolve(
@@ -140,7 +177,6 @@ fn resolve(
             .spawn((
                 Name::new("camera"),
                 Camera3dBundle {
-                    transform: Transform::from_xyz(0.0, 0.9 - 0.2, 0.0),
                     projection: Projection::Perspective(PerspectiveProjection {
                         fov: consts::PI / 2.0,
                         ..default()
@@ -150,12 +186,12 @@ fn resolve(
             ))
             .id();
 
-        let collider = commands
+        let head = commands
             .spawn((
-                Name::new("collider"),
-                Collider::capsule_y(0.9, 0.2),
-                TransformBundle::default(),
+                Transform::from_xyz(0.0, COLLIDER_HALF_HEIGHT, 0.0),
+                GlobalTransform::default(),
             ))
+            .add_child(camera)
             .id();
 
         commands
@@ -163,113 +199,16 @@ fn resolve(
             .remove::<Unresolved>()
             .insert((
                 CameraController::new(camera),
-                CharacterBody::new(collider),
                 AnimationSequencer::from(&animations.data).playing_all(),
+                Collider::capsule_y(COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS),
+                CharacterBody::default(),
             ))
-            .add_child(camera)
-            .add_child(collider);
+            .add_child(head);
     }
 }
 
-fn update_state(
-    input: Res<Input>,
-    mut entity_q: Query<(&Velocity, &CharacterBody, &mut GhostState)>,
-) {
-    for (velocity, character_body, mut state) in entity_q.iter_mut() {
-        let is_moving = velocity.linvel.xz().length() > 0.01;
-
-        let mut update = |new_state: GhostState| {
-            if *state != new_state {
-                *state = new_state;
-            }
-        };
-
-        if input.crouching {
-            update(GhostState::Crouching);
-
-            continue;
-        }
-
-        if character_body.is_grounded {
-            if is_moving {
-                if input.running {
-                    update(GhostState::Running);
-
-                    continue;
-                }
-
-                update(GhostState::Moving);
-
-                continue;
-            }
-
-            update(GhostState::Standing);
-
-            continue;
-        }
-
-        if velocity.linvel.y > 0.0 {
-            update(GhostState::Rising);
-
-            continue;
-        }
-
-        if velocity.linvel.y <= 0.0 {
-            update(GhostState::Falling);
-
-            continue;
-        }
-    }
-}
-
-fn update_stats(mut entity_q: Query<(&GhostState, &mut Stats), Changed<GhostState>>) {
-    for (state, mut stats) in entity_q.iter_mut() {
-        let mut result = Stats::default();
-
-        result.moving_speed = 0.025;
-        result.jumping_high = 0.03;
-        result.acceleration = 20.0;
-
-        match state {
-            GhostState::Standing => (),
-            GhostState::Moving => (),
-            GhostState::Rising => result.moving_speed = 0.015,
-            GhostState::Falling => result.moving_speed = 0.015,
-            GhostState::Crouching => {
-                result.moving_speed = 0.015;
-                result.jumping_high = 0.02;
-            }
-            GhostState::Running => result.moving_speed = 0.04,
-        };
-
-        if *stats != result {
-            *stats = result;
-        }
-    }
-}
-
-fn update_animation(
-    mut entity_q: Query<(&GhostState, &mut AnimationSequencer), Changed<GhostState>>,
-) {
-    for (state, mut sequencer) in entity_q.iter_mut() {
-        match state {
-            GhostState::Crouching => {
-                sequencer.add_transition("crouching", 1.0, 100);
-                sequencer.add_transition("standing", 0.0, 100);
-            }
-            _ => {
-                sequencer.add_transition("crouching", 0.0, 100);
-                sequencer.add_transition("standing", 1.0, 100);
-            }
-        };
-    }
-}
-
-fn respawn(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut entity_q: Query<(&mut Velocity, &mut Transform), With<Control>>,
-) {
-    if !keyboard.just_pressed(KeyCode::Escape) {
+fn respawn(input: Res<Input>, mut entity_q: Query<(&mut Velocity, &mut Transform), With<Control>>) {
+    if !input.pausing {
         return;
     }
 
@@ -283,30 +222,32 @@ fn respawn(
 
 fn look_around(
     input: Res<Input>,
-    mut entity_q: Query<(&mut Transform, &CameraController), With<Control>>,
-    mut camera_q: Query<&mut Transform, (With<Camera>, Without<CameraController>)>,
+    mut entity_q: Query<(&mut Transform, &Children), With<Control>>,
+    mut head_q: Query<&mut Transform, Without<Control>>,
 ) {
     if !input.is_changed() {
         return;
     }
 
-    for (mut entity_transform, controller) in entity_q.iter_mut() {
-        let mut camera_transform = camera_q
-            .get_mut(controller.target)
-            .expect("CameraController target doesn't exist or doesn't have a Camera component");
+    for (mut entity_transform, children) in entity_q.iter_mut() {
+        children.get(0).unwrap();
+
+        let mut head_transform = head_q
+            .get_mut(*children.get(0).unwrap())
+            .expect("character doesn't have head");
 
         let rotation =
-            camera_transform.rotation * Quat::from_rotation_x(input.looking_around.y * 0.002);
+            head_transform.rotation * Quat::from_rotation_x(input.looking_around.y * 0.002);
 
         if (rotation * Vec3::Y).y >= 0.0 {
-            camera_transform.rotation = rotation;
+            head_transform.rotation = rotation;
         }
 
         entity_transform.rotation *= Quat::from_rotation_y(input.looking_around.x * 0.002);
     }
 }
 
-fn move_character(
+fn move_standing(
     time: Res<Time>,
     rapier_config: Res<RapierConfiguration>,
     input: Res<Input>,
@@ -316,54 +257,77 @@ fn move_character(
             &Transform,
             &Stats,
             &CharacterBody,
+            Option<&Control>,
             Option<&GravityScale>,
         ),
-        With<Control>,
+        Or<(
+            With<StandingState>,
+            With<MovingState>,
+            With<RunningState>,
+            With<CrouchingStandingState>,
+        )>,
     >,
 ) {
-    for (mut velocity, transform, stats, character_body, gravity_scale) in entity_q.iter_mut() {
-        let direction = if input.moving == Vec2::ZERO {
-            Vec2::ZERO
-        } else {
-            (transform.rotation * Vec3::new(input.moving.x, 0.0, input.moving.y))
-                .xz()
-                .normalize_or_zero()
-        };
+    for (mut velocity, transform, stats, character_body, control, gravity_scale) in
+        entity_q.iter_mut()
+    {
+        let normal = character_body.normal;
 
-        if character_body.is_grounded {
-            let normal = character_body.normal;
+        let mut direction_along_surface = Vec3::ZERO;
 
-            let direction_along_surface = (transform.rotation
+        if control.is_some() {
+            direction_along_surface = (transform.rotation
                 * Vec3::new(input.moving.x, 0.0, input.moving.y))
             .reject_from(normal)
             .normalize_or_zero();
-
-            let velocity_along_surface = velocity.linvel.reject_from(normal);
-
-            let vector_along_surface = velocity_along_surface.lerp(
-                direction_along_surface * stats.moving_speed,
-                stats.acceleration * time.delta_seconds(),
-            );
-
-            velocity.linvel = vector_along_surface + velocity.linvel.project_onto(normal);
-
-            if input.jumping {
-                velocity.linvel +=
-                    rapier_config.gravity.normalize_or_zero() * -1.0 * stats.jumping_high
-            }
-
-            continue;
         }
 
-        let move_velocity = velocity.linvel.xz();
+        let velocity_along_surface = velocity.linvel.reject_from(normal);
 
+        let vector_along_surface = velocity_along_surface.lerp(
+            direction_along_surface * stats.moving_speed,
+            time.delta_seconds() * stats.acceleration,
+        );
+
+        velocity.linvel = vector_along_surface + velocity.linvel.project_onto(normal);
+
+        if control.is_some() && input.jumping {
+            velocity.linvel += rapier_config.gravity.normalize_or_zero() * -stats.jumping_high;
+        }
+
+        continue;
+    }
+}
+
+fn move_falling(
+    time: Res<Time>,
+    rapier_config: Res<RapierConfiguration>,
+    input: Res<Input>,
+    mut entity_q: Query<
+        (
+            &mut Velocity,
+            &Transform,
+            &Stats,
+            Option<&GravityScale>,
+            Option<&Control>,
+        ),
+        Or<(With<FallingState>, With<CrouchingFallingState>)>,
+    >,
+) {
+    for (mut velocity, transform, stats, gravity_scale, control) in entity_q.iter_mut() {
         velocity.linvel += rapier_config.gravity
             * gravity_scale.map(|v| v.0).unwrap_or(1.0)
             * time.delta_seconds().powi(2);
 
-        if direction == Vec2::ZERO {
+        if control.is_none() || input.moving == Vec2::ZERO {
             continue;
         }
+
+        let direction = (transform.rotation * Vec3::new(input.moving.x, 0.0, input.moving.y))
+            .xz()
+            .normalize_or_zero();
+
+        let move_velocity = velocity.linvel.xz();
 
         let speed = stats.moving_speed * time.delta_seconds();
 
@@ -375,5 +339,42 @@ fn move_character(
         }
 
         velocity.linvel = Vec3::new(result.x, velocity.linvel.y, result.y);
+    }
+}
+
+fn update_head_position(
+    time: Res<Time>,
+    mut entity_q: Query<
+        (
+            &Children,
+            Option<&CrouchingStandingState>,
+            Option<&CrouchingFallingState>,
+        ),
+        Or<(
+            With<CrouchingStandingState>,
+            With<CrouchingFallingState>,
+            With<FallingState>,
+            With<MovingState>,
+            With<RunningState>,
+            With<StandingState>,
+        )>,
+    >,
+    mut head_q: Query<&mut Transform, Without<CharacterBody>>,
+) {
+    for (children, crouching_standing, crouching_falling) in entity_q.iter_mut() {
+        let position = if crouching_standing.is_some() || crouching_falling.is_some() {
+            COLLIDER_CROUCHING_HALF_HEIGHT
+        } else {
+            COLLIDER_HALF_HEIGHT
+        };
+
+        let entity = *children.get(0).expect("character doesn't have head");
+
+        let mut transform = head_q.get_mut(entity).unwrap();
+
+        transform.translation.y = transform
+            .translation
+            .y
+            .lerp(position, time.delta_seconds() * 10.0);
     }
 }

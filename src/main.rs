@@ -3,12 +3,7 @@ use std::f32::consts;
 use animation_sequencer::AnimationSequencerPlugin;
 use bevy::{
     prelude::*,
-    render::{
-        camera::CameraRenderGraph,
-        render_resource::{AsBindGroup, ShaderRef},
-        view::VisibleEntities,
-    },
-    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
+    render::render_resource::{AsBindGroup, ShaderRef},
 };
 mod camera_controller;
 mod control;
@@ -17,8 +12,8 @@ mod model;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
 use camera_controller::{CameraControllerPlugin, Spectate};
-use character_body::{CharacterBody, CharacterBodyPlugin};
-use control::{Bindings, Control, ControlPlugin, Input};
+use character_body::CharacterBodyPlugin;
+use control::{Control, ControlPlugin};
 use entities::{
     ghost::{Ghost, GhostPlugin},
     traffic_cone::TrafficCone,
@@ -35,7 +30,7 @@ fn main() {
             DefaultPlugins,
             WorldInspectorPlugin::new(),
             RapierPhysicsPlugin::<NoUserData>::default(),
-            RapierDebugRenderPlugin::default(),
+            // RapierDebugRenderPlugin::default(),
             UiMaterialPlugin::<CrosshairMaterial>::default(),
         ))
         .add_plugins((
@@ -118,7 +113,7 @@ fn startup(mut commands: Commands, mut crosshair_materials: ResMut<Assets<Crossh
         .insert(Control);
 
     commands.spawn(Ghost::new()).insert(
-        Transform::from_xyz(10.0, 10.0, 0.0).with_rotation(Quat::from_rotation_y(consts::PI)),
+        Transform::from_xyz(4.0, 2.2, 5.0).with_rotation(Quat::from_rotation_y(consts::PI)),
     );
 
     commands

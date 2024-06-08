@@ -49,16 +49,25 @@ pub struct Input {
     pub pausing: bool,
 }
 
+#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
+pub enum ControlSystems {
+    Update,
+}
+
 pub struct ControlPlugin;
 
 impl Plugin for ControlPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Control>()
-            .register_type::<Input>()
-            .insert_resource(Input::default())
-            .register_type::<Bindings>()
-            .insert_resource(Bindings::default())
-            .add_systems(First, update);
+        app.register_type::<Control>();
+
+        app.register_type::<Bindings>()
+            .insert_resource(Bindings::default());
+
+        app.register_type::<Input>()
+            .insert_resource(Input::default());
+
+        app.configure_sets(PreUpdate, ControlSystems::Update)
+            .add_systems(PreUpdate, update.in_set(ControlSystems::Update));
     }
 }
 

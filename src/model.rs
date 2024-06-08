@@ -1,9 +1,6 @@
-use std::ops::Deref;
-
 use bevy::{
     gltf::{Gltf, GltfMesh, GltfNode},
     prelude::*,
-    utils::hashbrown::{HashMap, HashSet},
 };
 use bevy_rapier3d::geometry::{Collider, ComputedColliderShape};
 
@@ -20,11 +17,17 @@ impl Model {
     }
 }
 
+#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
+pub enum ModelSystems {
+    Resolve,
+}
+
 pub struct ModelPlugin;
 
 impl Plugin for ModelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(First, load).add_systems(First, resolve);
+        app.configure_sets(PreUpdate, ModelSystems::Resolve)
+            .add_systems(PreUpdate, (load, resolve).in_set(ModelSystems::Resolve));
     }
 }
 
@@ -36,33 +39,6 @@ fn load(server: Res<AssetServer>, mut commands: Commands, models_q: Query<(Entit
             .entity(entity)
             .remove::<Model>()
             .insert(server.load::<Gltf>(src));
-    }
-}
-
-fn resolve(
-    gltf_res: Res<Assets<Gltf>>,
-    nodes_res: Res<Assets<GltfNode>>,
-    mut gltf_meshes_res: ResMut<Assets<GltfMesh>>,
-    mut meshes_res: ResMut<Assets<Mesh>>,
-    mut commands: Commands,
-    models_q: Query<(Entity, &Handle<Gltf>)>,
-) {
-    for (entity, gltf) in models_q.iter() {
-        gltf_res.get(gltf).map(|gltf| {
-            gltf.named_nodes.get("model").map(|node| {
-                nodes_res.get(node).map(|node| {
-                    resolve_node(
-                        &entity,
-                        &mut commands,
-                        &mut gltf_meshes_res,
-                        &mut meshes_res,
-                        node,
-                    )
-                });
-            });
-
-            commands.entity(entity).remove::<Handle<Gltf>>();
-        });
     }
 }
 
@@ -142,4 +118,31 @@ fn resolve_node(
     node.children
         .iter()
         .for_each(|node| resolve_node(&entity, commands, gltf_meshes_res, meshes_res, node));
+}
+
+fn resolve(
+    gltf_res: Res<Assets<Gltf>>,
+    nodes_res: Res<Assets<GltfNode>>,
+    mut gltf_meshes_res: ResMut<Assets<GltfMesh>>,
+    mut meshes_res: ResMut<Assets<Mesh>>,
+    mut commands: Commands,
+    models_q: Query<(Entity, &Handle<Gltf>)>,
+) {
+    for (entity, gltf) in models_q.iter() {
+        gltf_res.get(gltf).map(|gltf| {
+            gltf.named_nodes.get("model").map(|node| {
+                nodes_res.get(node).map(|node| {
+                    resolve_node(
+                        &entity,
+                        &mut commands,
+                        &mut gltf_meshes_res,
+                        &mut meshes_res,
+                        node,
+                    )
+                });
+            });
+
+            commands.entity(entity).remove::<Handle<Gltf>>();
+        });
+    }
 }

@@ -6,28 +6,22 @@ use bevy::{
     prelude::*,
 };
 use bevy_rapier3d::{
-    dynamics::{GravityScale, Velocity},
+    dynamics::Velocity,
     geometry::Collider,
     pipeline::QueryFilter,
     plugin::{RapierConfiguration, RapierContext},
 };
 
-#[derive(Component, Reflect)]
+#[derive(Component, Reflect, Default)]
 #[reflect(Component)]
 pub struct CharacterBody {
     pub is_grounded: bool,
     pub normal: Vec3,
-    pub collider: Entity,
 }
 
-impl CharacterBody {
-    pub fn new(collider: Entity) -> Self {
-        Self {
-            is_grounded: false,
-            normal: Vec3::ZERO,
-            collider,
-        }
-    }
+#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
+pub enum CharacterBodySystems {
+    Update,
 }
 
 pub struct CharacterBodyPlugin;
@@ -35,7 +29,8 @@ pub struct CharacterBodyPlugin;
 impl Plugin for CharacterBodyPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<CharacterBody>()
-            .add_systems(Update, update);
+            .configure_sets(PreUpdate, CharacterBodySystems::Update)
+            .add_systems(PreUpdate, update.in_set(CharacterBodySystems::Update));
     }
 }
 
@@ -93,47 +88,44 @@ fn collide_and_slide(
 fn update(
     rapier: Res<RapierContext>,
     rapier_config: Res<RapierConfiguration>,
-    mut entity_q: Query<(&mut Velocity, &mut Transform, &mut CharacterBody)>,
-    collider_q: Query<&Collider, Without<CharacterBody>>,
+    mut entity_q: Query<(
+        Entity,
+        &mut Velocity,
+        &mut Transform,
+        &mut CharacterBody,
+        &Collider,
+    )>,
 ) {
-    for (mut velocity, mut transform, mut character_body) in entity_q.iter_mut() {
-        let collider = collider_q
-            .get(character_body.collider)
-            .expect("CharacterBody collider doesn't exist or doesn't have a Collider component");
-
-        let rotation = transform.rotation;
-        let position = transform.translation;
+    for (entity, mut velocity, mut transform, mut character_body, collider) in entity_q.iter_mut() {
+        velocity.linvel = collide_and_slide(
+            &rapier,
+            transform.rotation,
+            collider,
+            entity,
+            velocity.linvel,
+            transform.translation,
+        );
+        transform.translation += velocity.linvel;
 
         character_body.is_grounded = false;
         character_body.normal = Vec3::ZERO;
 
         rapier
             .cast_shape(
-                position,
-                rotation,
-                rapier_config.gravity.normalize_or_zero() * 0.12,
+                transform.translation,
+                transform.rotation,
+                rapier_config.gravity.normalize_or_zero() * 0.14,
                 collider,
                 1.0,
                 true,
-                QueryFilter::new().exclude_collider(character_body.collider),
+                QueryFilter::new().exclude_collider(entity),
             )
             .map_or(None, |(_, hit)| hit.details)
             .map(|details| details.normal1.normalize_or_zero())
             .map(|normal| {
                 character_body.normal = normal;
                 character_body.is_grounded =
-                    rapier_config.gravity.angle_between(normal) > consts::PI * 0.74;
+                    rapier_config.gravity.angle_between(normal) > consts::PI * 0.70;
             });
-
-        velocity.linvel = collide_and_slide(
-            &rapier,
-            rotation,
-            collider,
-            character_body.collider,
-            velocity.linvel,
-            position,
-        );
-
-        transform.translation += velocity.linvel;
     }
 }
