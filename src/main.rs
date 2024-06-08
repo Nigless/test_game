@@ -43,7 +43,7 @@ fn main() {
         ))
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
-            brightness: 500.0,
+            brightness: 300.0,
         })
         .insert_resource(ClearColor(Color::rgb(0.7, 0.7, 0.7)))
         .add_systems(PreStartup, startup)
@@ -94,8 +94,9 @@ fn startup(mut commands: Commands, mut crosshair_materials: ResMut<Assets<Crossh
 
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
-            illuminance: 2000.0,
+            illuminance: 3000.0,
             shadows_enabled: true,
+            color: Color::rgb(1.0, 1.0, 0.9),
             ..default()
         },
         transform: Transform {
