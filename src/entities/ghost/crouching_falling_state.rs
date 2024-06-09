@@ -1,8 +1,3 @@
-use std::{
-    any::{self, Any},
-    default,
-};
-
 use bevy::{
     app::{App, Plugin},
     ecs::{
@@ -17,7 +12,7 @@ use bevy::{
 };
 use bevy_rapier3d::{
     dynamics::Velocity,
-    geometry::{Collider, Toi},
+    geometry::Collider,
     pipeline::QueryFilter,
     plugin::{RapierConfiguration, RapierContext},
 };
@@ -46,32 +41,17 @@ impl Plugin for CrouchingFallingStatePlugin {
             PreUpdate,
             (
                 switch.in_set(GhostSystems::Switch),
-                exit.in_set(GhostSystems::Exit),
                 enter.in_set(GhostSystems::Enter),
             ),
         );
     }
 }
 
-fn enter(
-    mut entity_q: Query<
-        (&mut Collider, &mut AnimationSequencer, &mut Stats),
-        Added<CrouchingFallingState>,
-    >,
-) {
-    for (mut collider, _sequencer, mut stats) in entity_q.iter_mut() {
+fn enter(mut entity_q: Query<(&mut Collider, &mut Stats), Added<CrouchingFallingState>>) {
+    for (mut collider, mut stats) in entity_q.iter_mut() {
         *collider = Collider::capsule_y(COLLIDER_CROUCHING_HALF_HEIGHT, COLLIDER_RADIUS);
 
         stats.moving_speed = 0.015;
-    }
-}
-
-fn exit(
-    mut removed: RemovedComponents<CrouchingFallingState>,
-    mut entity_q: Query<&mut AnimationSequencer>,
-) {
-    for entity in removed.read() {
-        let _sequencer = entity_q.get_mut(entity).unwrap();
     }
 }
 
@@ -99,25 +79,18 @@ fn switch(
     {
         let is_moving = velocity.linvel.reject_from(character_body.normal).length() > 0.01;
 
-        let mut vector_cast = rapier_config.gravity.normalize_or_zero()
-            * (COLLIDER_HALF_HEIGHT - COLLIDER_CROUCHING_HALF_HEIGHT);
+        let half_shape_distance = COLLIDER_HALF_HEIGHT - COLLIDER_CROUCHING_HALF_HEIGHT;
 
-        let default_distance = vector_cast.length();
+        let vector_cast =
+            rapier_config.gravity.normalize_or_zero() * (half_shape_distance * 2.0 + 0.1);
 
-        vector_cast = vector_cast.normalize_or_zero()
-            * (vector_cast.length()
-                + (COLLIDER_HALF_HEIGHT - COLLIDER_CROUCHING_HALF_HEIGHT)
-                + 0.1);
+        let max_distance = vector_cast.length();
 
         let filter = QueryFilter::new().exclude_collider(entity);
 
         let mut normal = Vec3::ZERO;
 
-        let map = |time_to_impact: f32| {
-            vector_cast.length() * time_to_impact
-                - 0.1
-                - (COLLIDER_HALF_HEIGHT - COLLIDER_CROUCHING_HALF_HEIGHT)
-        };
+        let map = |time_to_impact: f32| vector_cast.length() * time_to_impact - 0.1;
 
         let distance_to_floor = rapier
             .cast_shape(
@@ -129,7 +102,7 @@ fn switch(
                 true,
                 filter,
             )
-            .map_or(default_distance, |(_, toi)| {
+            .map_or(max_distance, |(_, toi)| {
                 normal = toi
                     .details
                     .map_or(normal, |d| d.normal1.normalize_or_zero());
@@ -147,10 +120,12 @@ fn switch(
                 true,
                 filter,
             )
-            .map_or(default_distance, |(_, toi)| map(toi.toi));
+            .map_or(max_distance, |(_, toi)| map(toi.toi));
 
-        if (control.is_some() && input.crouching) || distance_to_floor + distance_to_ceiling < 0.0 {
-            if distance_to_floor + default_distance <= 0.01 {
+        if (control.is_some() && input.crouching)
+            || distance_to_floor + distance_to_ceiling < half_shape_distance * 2.0
+        {
+            if distance_to_floor <= 0.001 {
                 character_body.normal = normal;
                 commands
                     .entity(entity)
@@ -163,11 +138,11 @@ fn switch(
             continue;
         }
 
-        if distance_to_floor < 0.0 || distance_to_ceiling < 0.0 {
+        if distance_to_floor < half_shape_distance || distance_to_ceiling < half_shape_distance {
             let vector_shift = if distance_to_floor < distance_to_ceiling {
-                -distance_to_floor
+                half_shape_distance - distance_to_floor
             } else {
-                distance_to_ceiling
+                -(half_shape_distance - distance_to_ceiling)
             };
 
             let head = *children.get(0).expect("character doesn't have head");
@@ -181,7 +156,9 @@ fn switch(
             character_body.normal = normal;
         }
 
-        if distance_to_floor <= 0.0 {
+        if distance_to_floor <= half_shape_distance {
+            character_body.normal = normal;
+
             if is_moving {
                 if control.is_some() && input.running {
                     commands

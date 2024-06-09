@@ -36,9 +36,8 @@ impl Plugin for StandingStatePlugin {
         app.register_type::<StandingState>().add_systems(
             PreUpdate,
             (
-                switch.in_set(GhostSystems::Switch),
-                exit.in_set(GhostSystems::Exit),
                 enter.in_set(GhostSystems::Enter),
+                switch.in_set(GhostSystems::Switch),
             ),
         );
     }
@@ -51,15 +50,6 @@ fn enter(mut entity_q: Query<(&mut Collider, &mut Stats), Added<StandingState>>)
         stats.moving_speed = 0.025;
         stats.jumping_high = 0.032;
         stats.acceleration = 10.0;
-    }
-}
-
-fn exit(
-    mut removed: RemovedComponents<StandingState>,
-    mut entity_q: Query<&mut AnimationSequencer>,
-) {
-    for entity in removed.read() {
-        let _sequencer = entity_q.get_mut(entity).unwrap();
     }
 }
 
