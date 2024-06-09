@@ -36,29 +36,17 @@ impl Plugin for FallingStatePlugin {
             PreUpdate,
             (
                 switch.in_set(GhostSystems::Switch),
-                exit.in_set(GhostSystems::Exit),
                 enter.in_set(GhostSystems::Enter),
             ),
         );
     }
 }
 
-fn enter(
-    mut entity_q: Query<(&mut Collider, &mut Stats, &mut AnimationSequencer), Added<FallingState>>,
-) {
-    for (mut collider, mut stats, _sequencer) in entity_q.iter_mut() {
+fn enter(mut entity_q: Query<(&mut Collider, &mut Stats), Added<FallingState>>) {
+    for (mut collider, mut stats) in entity_q.iter_mut() {
         *collider = Collider::capsule_y(COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS);
 
         stats.moving_speed = 0.015;
-    }
-}
-
-fn exit(
-    mut entity_q: Query<&mut AnimationSequencer>,
-    mut removed: RemovedComponents<FallingState>,
-) {
-    for entity in removed.read() {
-        let _sequencer = entity_q.get_mut(entity).unwrap();
     }
 }
 

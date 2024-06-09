@@ -1,5 +1,3 @@
-use std::ops::Mul;
-
 use bevy::{
     app::{App, Plugin},
     ecs::{
@@ -10,8 +8,7 @@ use bevy::{
     },
     prelude::*,
     reflect::Reflect,
-    render::camera,
-    transform::{self, components::Transform},
+    transform::components::Transform,
 };
 use bevy_rapier3d::{
     dynamics::Velocity,
@@ -22,9 +19,8 @@ use bevy_rapier3d::{
 
 use crate::{
     animation_sequencer::AnimationSequencer,
-    camera_controller::CameraController,
     character_body::CharacterBody,
-    control::{self, Control, Input},
+    control::{Control, Input},
 };
 
 use super::{
