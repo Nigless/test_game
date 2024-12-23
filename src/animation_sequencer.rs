@@ -1,6 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use bevy::transform::components::Transform;
+use bevy::ecs::component::Components;
+use bevy::transform::components::{self, Transform};
 use bevy::utils::hashbrown::HashMap;
 
 use bevy::prelude::*;
@@ -481,6 +482,7 @@ fn resolve(
 fn update(
     assets: Res<Assets<Animation>>,
     mut entity_q: Query<&mut AnimationSequencer>,
+    components: &Components,
     mut target_q: Query<Option<&mut Transform>, Without<AnimationSequencer>>,
 ) {
     for mut sequencer in entity_q.iter_mut() {

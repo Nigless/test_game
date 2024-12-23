@@ -15,13 +15,7 @@ use bevy_rapier3d::{
 #[derive(Component, Reflect, Default)]
 #[reflect(Component)]
 pub struct CharacterBody {
-    pub is_grounded: bool,
     pub normal: Vec3,
-}
-
-#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
-pub enum CharacterBodySystems {
-    Update,
 }
 
 pub struct CharacterBodyPlugin;
@@ -29,65 +23,13 @@ pub struct CharacterBodyPlugin;
 impl Plugin for CharacterBodyPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<CharacterBody>()
-            .configure_sets(PreUpdate, CharacterBodySystems::Update)
-            .add_systems(PreUpdate, update.in_set(CharacterBodySystems::Update));
+            .add_systems(Update, update);
     }
 }
 
-fn collide_and_slide(
-    rapier: &Res<RapierContext>,
-    rotation: Quat,
-    collider: &Collider,
-    entity: Entity,
-    velocity: Vec3,
-    position: Vec3,
-) -> Vec3 {
-    let skin_width = 0.1;
-
-    let vector_cast = velocity.normalize_or_zero() * (velocity.length() + skin_width);
-    let collision = rapier
-        .cast_shape(
-            position,
-            rotation,
-            vector_cast,
-            collider,
-            1.0,
-            true,
-            QueryFilter::new().exclude_collider(entity),
-        )
-        .map_or(None, |(_, hit)| {
-            hit.details.map(|details| (hit.toi, details))
-        });
-
-    if let Some((time_of_impact, details)) = collision {
-        let normal = details.normal1.normalize_or_zero();
-
-        let mut vector_to_surface =
-            vector_cast.normalize_or_zero() * (vector_cast.length() * time_of_impact - skin_width);
-
-        if vector_to_surface.length() <= skin_width {
-            vector_to_surface = Vec3::ZERO;
-        }
-
-        let vector_slide = velocity.reject_from(normal);
-
-        return vector_to_surface
-            + collide_and_slide(
-                rapier,
-                rotation,
-                collider,
-                entity,
-                vector_slide,
-                position + vector_to_surface,
-            );
-    };
-
-    return velocity;
-}
-
 fn update(
+    time: Res<Time>,
     rapier: Res<RapierContext>,
-    rapier_config: Res<RapierConfiguration>,
     mut entity_q: Query<(
         Entity,
         &mut Velocity,
@@ -96,36 +38,54 @@ fn update(
         &Collider,
     )>,
 ) {
+    let skin_width = 0.1;
+    let min_move = 0.1;
+    let max_depth = 10;
+
     for (entity, mut velocity, mut transform, mut character_body, collider) in entity_q.iter_mut() {
-        velocity.linvel = collide_and_slide(
-            &rapier,
-            transform.rotation,
-            collider,
-            entity,
-            velocity.linvel,
-            transform.translation,
-        );
-        transform.translation += velocity.linvel;
-
-        character_body.is_grounded = false;
         character_body.normal = Vec3::ZERO;
+        for _ in 0..max_depth {
+            let vector_cast = velocity.linvel.normalize_or_zero()
+                * (velocity.linvel.length() * time.delta_seconds() + skin_width);
 
-        rapier
-            .cast_shape(
-                transform.translation,
-                transform.rotation,
-                rapier_config.gravity.normalize_or_zero() * 0.14,
-                collider,
-                1.0,
-                true,
-                QueryFilter::new().exclude_collider(entity),
-            )
-            .map_or(None, |(_, hit)| hit.details)
-            .map(|details| details.normal1.normalize_or_zero())
-            .map(|normal| {
-                character_body.normal = normal;
-                character_body.is_grounded =
-                    rapier_config.gravity.angle_between(normal) > consts::PI * 0.70;
-            });
+            let collision = rapier
+                .cast_shape(
+                    transform.translation,
+                    transform.rotation,
+                    vector_cast,
+                    collider,
+                    1.0,
+                    true,
+                    QueryFilter::new().exclude_collider(entity),
+                )
+                .map_or(None, |(_, hit)| {
+                    hit.details.map(|details| (hit.toi, details))
+                });
+
+            if collision.is_none() {
+                transform.translation +=
+                    vector_cast.normalize_or_zero() * (vector_cast.length() - skin_width);
+
+                continue;
+            }
+
+            let (time_of_impact, details) = collision.unwrap();
+
+            let normal = details.normal1.normalize_or_zero();
+
+            character_body.normal = normal;
+
+            let distance_to_collision = vector_cast.length() * time_of_impact - skin_width;
+
+            let mut vector_to_collision = vector_cast.normalize_or_zero() * distance_to_collision;
+
+            if distance_to_collision <= skin_width {
+                vector_to_collision = Vec3::ZERO;
+            }
+
+            velocity.linvel = velocity.linvel.reject_from(normal);
+
+            transform.translation += vector_to_collision;
+        }
     }
 }
