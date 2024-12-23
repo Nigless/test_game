@@ -1,4 +1,4 @@
-use std::f32::consts;
+use std::{env, f32::consts};
 
 use animation_sequencer::AnimationSequencerPlugin;
 use bevy::{
@@ -15,12 +15,13 @@ use camera_controller::{CameraControllerPlugin, Spectate};
 use character_body::CharacterBodyPlugin;
 use control::{Control, ControlPlugin};
 use entities::{
-    ghost::{Ghost, GhostPlugin},
+    ghost::{GhostBundle, GhostPlugin},
     traffic_cone::TrafficCone,
 };
 use model::{Model, ModelPlugin};
 mod animation_sequencer;
 mod character_body;
+mod lib;
 
 use crate::entities::package::Package;
 
@@ -30,7 +31,7 @@ fn main() {
             DefaultPlugins,
             WorldInspectorPlugin::new(),
             RapierPhysicsPlugin::<NoUserData>::default(),
-            // RapierDebugRenderPlugin::default(),
+            RapierDebugRenderPlugin::default(),
             UiMaterialPlugin::<CrosshairMaterial>::default(),
         ))
         .add_plugins((
@@ -108,12 +109,12 @@ fn startup(mut commands: Commands, mut crosshair_materials: ResMut<Assets<Crossh
     });
 
     commands
-        .spawn(Ghost::new())
+        .spawn(GhostBundle::new())
         .insert(Transform::from_xyz(0.0, 3.0, 0.0))
         .insert(Spectate)
         .insert(Control);
 
-    commands.spawn(Ghost::new()).insert(
+    commands.spawn(GhostBundle::new()).insert(
         Transform::from_xyz(4.0, 2.2, 5.0).with_rotation(Quat::from_rotation_y(consts::PI)),
     );
 
