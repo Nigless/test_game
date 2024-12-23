@@ -32,7 +32,7 @@ struct Parameters {
 impl Default for Parameters {
     fn default() -> Self {
         Self {
-            walking_speed: 2.0,
+            walking_speed: 4.0,
             standing_acceleration: 0.4,
             standing_jump_height: 2.5,
         }
@@ -112,7 +112,13 @@ impl Plugin for GhostPlugin {
             .add_systems(First, resolve)
             .add_systems(
                 PreUpdate,
-                (gravity, moving, jumping.run_if(jumping_condition)).chain(),
+                (
+                    looking.run_if(looking_condition),
+                    gravity,
+                    moving,
+                    jumping.run_if(jumping_condition),
+                )
+                    .chain(),
             );
     }
 }
@@ -164,6 +170,33 @@ fn resolve(
                 AnimationSequencer::from(&animations.data).playing_all(),
             ))
             .add_child(head);
+    }
+}
+
+fn looking_condition(input: Res<Input>) -> bool {
+    input.is_changed()
+}
+
+fn looking(
+    input: Res<Input>,
+    mut entity_q: Query<(&mut Transform, &Children), (With<Control>, With<Parameters>)>,
+    mut head_q: Query<&mut Transform, Without<Parameters>>,
+) {
+    for (mut entity_transform, children) in entity_q.iter_mut() {
+        children.get(0).unwrap();
+
+        let mut head_transform = head_q
+            .get_mut(*children.get(0).unwrap())
+            .expect("character doesn't have head");
+
+        let rotation =
+            head_transform.rotation * Quat::from_rotation_x(input.looking_around.y * 0.002);
+
+        if (rotation * Vec3::Y).y >= 0.0 {
+            head_transform.rotation = rotation;
+        }
+
+        entity_transform.rotation *= Quat::from_rotation_y(input.looking_around.x * 0.002);
     }
 }
 
