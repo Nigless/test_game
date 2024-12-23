@@ -66,7 +66,7 @@ fn update(
                 transform.translation +=
                     vector_cast.normalize_or_zero() * (vector_cast.length() - skin_width);
 
-                continue;
+                break;
             }
 
             let (time_of_impact, details) = collision.unwrap();
