@@ -12,10 +12,22 @@ use bevy_rapier3d::{
     plugin::{RapierConfiguration, RapierContext},
 };
 
-#[derive(Component, Reflect, Default)]
+#[derive(Component, Reflect)]
 #[reflect(Component)]
 pub struct CharacterBody {
-    pub normal: Vec3,
+    pub skin_width: f32,
+    pub max_slides: i32,
+    pub cast_distance: f32,
+}
+
+impl Default for CharacterBody {
+    fn default() -> Self {
+        Self {
+            skin_width: 0.1,
+            max_slides: 10,
+            cast_distance: 10.0,
+        }
+    }
 }
 
 pub struct CharacterBodyPlugin;
@@ -38,15 +50,12 @@ fn update(
         &Collider,
     )>,
 ) {
-    let skin_width = 0.1;
-    let min_move = 0.1;
-    let max_depth = 10;
-
     for (entity, mut velocity, mut transform, mut character_body, collider) in entity_q.iter_mut() {
-        character_body.normal = Vec3::ZERO;
-        for _ in 0..max_depth {
-            let vector_cast = velocity.linvel.normalize_or_zero()
-                * (velocity.linvel.length() * time.delta_seconds() + skin_width);
+        for _ in 0..character_body.max_slides {
+            let linear_velocity = velocity.linvel * time.delta_seconds();
+
+            let vector_cast = linear_velocity
+                .clamp_length_min(character_body.skin_width * character_body.cast_distance);
 
             let collision = rapier
                 .cast_shape(
@@ -63,24 +72,30 @@ fn update(
                 });
 
             if collision.is_none() {
-                transform.translation +=
-                    vector_cast.normalize_or_zero() * (vector_cast.length() - skin_width);
+                transform.translation += linear_velocity;
 
                 break;
             }
 
             let (time_of_impact, details) = collision.unwrap();
 
-            let normal = details.normal1.normalize_or_zero();
+            let normal = details.normal1;
 
-            character_body.normal = normal;
+            let mut vector_to_collision = vector_cast * time_of_impact;
 
-            let distance_to_collision = vector_cast.length() * time_of_impact - skin_width;
+            vector_to_collision -= vector_to_collision
+                * ((normal * character_body.skin_width).length()
+                    / vector_to_collision.project_onto(normal).length());
 
-            let mut vector_to_collision = vector_cast.normalize_or_zero() * distance_to_collision;
-
-            if distance_to_collision <= skin_width {
-                vector_to_collision = Vec3::ZERO;
+            if vector_to_collision
+                .normalize_or_zero()
+                .dot(linear_velocity.normalize_or_zero())
+                < 0.0
+            {
+                vector_to_collision = vector_to_collision.project_onto(normal);
+            } else if vector_to_collision.length() > linear_velocity.length() {
+                transform.translation += linear_velocity;
+                break;
             }
 
             velocity.linvel = velocity.linvel.reject_from(normal);

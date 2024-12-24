@@ -60,7 +60,7 @@ pub const COLLIDER_RADIUS: f32 = 0.3;
 pub const COLLIDER_HALF_HEIGHT: f32 = 1.0 - COLLIDER_RADIUS;
 pub const COLLIDER_CROUCHING_HALF_HEIGHT: f32 = COLLIDER_HALF_HEIGHT * 0.4;
 
-#[derive(Bundle, Default)]
+#[derive(Bundle)]
 pub struct GhostBundle {
     unresolved: Unresolved,
     name: Name,
@@ -77,7 +77,12 @@ impl GhostBundle {
         Self {
             name: Name::new("Ghost"),
             collider: Collider::capsule_y(COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS),
-            ..default()
+            unresolved: Unresolved,
+            parameters: default(),
+            transform: default(),
+            velocity: default(),
+            gravity: default(),
+            body: default(),
         }
     }
 }
