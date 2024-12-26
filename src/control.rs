@@ -21,6 +21,7 @@ pub struct Bindings {
     pub crouch: KeyCode,
     pub run: KeyCode,
     pub pause: KeyCode,
+    pub switch_full_screen: KeyCode,
     pub mouse_sensitivity: f32,
 }
 
@@ -35,6 +36,7 @@ impl Default for Bindings {
             crouch: KeyCode::ControlLeft,
             run: KeyCode::ShiftLeft,
             pause: KeyCode::Escape,
+            switch_full_screen: KeyCode::F11,
             mouse_sensitivity: 0.002,
         }
     }
@@ -49,6 +51,7 @@ pub struct Input {
     pub running: bool,
     pub crouching: bool,
     pub pausing: bool,
+    pub full_screen_switching: bool,
 }
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
@@ -103,6 +106,7 @@ fn update(
     }
 
     result.jumping = keyboard.just_pressed(controls.jump);
+    result.full_screen_switching = keyboard.just_pressed(controls.switch_full_screen);
     result.running = keyboard.pressed(controls.run);
     result.crouching = keyboard.pressed(controls.crouch);
 

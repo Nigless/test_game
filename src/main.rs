@@ -2,8 +2,14 @@ use std::{env, f32::consts};
 
 use animation_sequencer::AnimationSequencerPlugin;
 use bevy::{
+    core_pipeline::core_2d::graph::input,
     prelude::*,
-    render::render_resource::{AsBindGroup, ShaderRef},
+    render::{
+        render_resource::{AsBindGroup, ShaderRef},
+        view::window,
+    },
+    tasks::futures_lite::io::Cursor,
+    window::WindowMode,
 };
 mod camera_controller;
 mod control;
@@ -13,7 +19,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
 use camera_controller::{CameraControllerPlugin, Spectate};
 use character_body::CharacterBodyPlugin;
-use control::{Control, ControlPlugin};
+use control::{Control, ControlPlugin, Input};
 use entities::{
     ghost::{GhostBundle, GhostPlugin},
     traffic_cone::TrafficCone,
@@ -34,7 +40,7 @@ fn main() {
             DefaultPlugins,
             WorldInspectorPlugin::new(),
             RapierPhysicsPlugin::<NoUserData>::default(),
-            RapierDebugRenderPlugin::default(),
+            // RapierDebugRenderPlugin::default(),
             UiMaterialPlugin::<CrosshairMaterial>::default(),
         ))
         .add_plugins((
@@ -49,10 +55,11 @@ fn main() {
         ))
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
-            brightness: 300.0,
+            brightness: 100.0,
         })
-        .insert_resource(ClearColor(Color::rgb(0.7, 0.7, 0.7)))
+        .insert_resource(ClearColor(Color::rgb(0.8, 0.9, 1.0)))
         .add_systems(PreStartup, startup)
+        .add_systems(PreUpdate, screen_mode_update)
         .run();
 }
 
@@ -63,6 +70,24 @@ impl UiMaterial for CrosshairMaterial {
     fn fragment_shader() -> ShaderRef {
         "crosshair.wgsl".into()
     }
+}
+
+fn screen_mode_update(input: Res<Input>, mut window_q: Query<&mut Window>) {
+    let mut window = window_q.get_single_mut().unwrap();
+
+    if !input.full_screen_switching {
+        return;
+    }
+
+    if window.mode == WindowMode::Fullscreen {
+        window.cursor.visible = true;
+        window.mode = WindowMode::Windowed;
+
+        return;
+    }
+
+    window.cursor.visible = false;
+    window.mode = WindowMode::Fullscreen
 }
 
 fn startup(mut commands: Commands, mut crosshair_materials: ResMut<Assets<CrosshairMaterial>>) {
@@ -102,7 +127,7 @@ fn startup(mut commands: Commands, mut crosshair_materials: ResMut<Assets<Crossh
         directional_light: DirectionalLight {
             illuminance: 3000.0,
             shadows_enabled: true,
-            color: Color::rgb(1.0, 1.0, 0.9),
+            color: Color::rgb(1.0, 1.0, 1.0),
             ..default()
         },
         transform: Transform {
@@ -129,5 +154,5 @@ fn startup(mut commands: Commands, mut crosshair_materials: ResMut<Assets<Crossh
 
     commands
         .spawn(TrafficCone::new())
-        .insert(Transform::from_xyz(3.0, 2.0, 5.0));
+        .insert(Transform::from_xyz(3.0, 3.0, 5.0));
 }
