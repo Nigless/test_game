@@ -21,6 +21,7 @@ pub struct Bindings {
     pub crouch: KeyCode,
     pub run: KeyCode,
     pub pause: KeyCode,
+    pub mouse_sensitivity: f32,
 }
 
 impl Default for Bindings {
@@ -34,6 +35,7 @@ impl Default for Bindings {
             crouch: KeyCode::ControlLeft,
             run: KeyCode::ShiftLeft,
             pause: KeyCode::Escape,
+            mouse_sensitivity: 0.002,
         }
     }
 }
@@ -80,7 +82,8 @@ fn update(
     let mut result = Input::default();
 
     for event in mouse.read().into_iter() {
-        result.looking_around += Vec2::new(-event.delta.x, -event.delta.y);
+        result.looking_around +=
+            Vec2::new(-event.delta.x, -event.delta.y) * controls.mouse_sensitivity;
     }
 
     if keyboard.pressed(controls.move_left) {

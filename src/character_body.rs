@@ -10,6 +10,7 @@ use bevy_rapier3d::{
     geometry::Collider,
     pipeline::QueryFilter,
     plugin::{RapierConfiguration, RapierContext},
+    prelude::{CollisionGroups, QueryFilterFlags, RapierColliderHandle, RigidBody, TOIStatus},
 };
 
 #[derive(Component, Reflect)]
@@ -18,15 +19,23 @@ pub struct CharacterBody {
     pub skin_width: f32,
     pub max_slides: i32,
     pub cast_distance: f32,
+    last_position: Vec3,
 }
 
 impl Default for CharacterBody {
     fn default() -> Self {
         Self {
-            skin_width: 0.1,
+            skin_width: 0.01,
             max_slides: 10,
-            cast_distance: 10.0,
+            cast_distance: 2.0,
+            last_position: Vec3::ZERO,
         }
+    }
+}
+impl CharacterBody {
+    pub fn skin_width(mut self, value: f32) -> Self {
+        self.skin_width = value;
+        self
     }
 }
 
@@ -42,44 +51,46 @@ impl Plugin for CharacterBodyPlugin {
 fn update(
     time: Res<Time>,
     rapier: Res<RapierContext>,
-    mut entity_q: Query<(
-        Entity,
-        &mut Velocity,
-        &mut Transform,
-        &mut CharacterBody,
-        &Collider,
-    )>,
+    mut entity_q: Query<(&mut Velocity, &mut Transform, &mut CharacterBody, &Collider)>,
 ) {
-    for (entity, mut velocity, mut transform, mut character_body, collider) in entity_q.iter_mut() {
+    let filter = QueryFilter::from(QueryFilterFlags::EXCLUDE_SENSORS);
+
+    for (mut velocity, mut transform, mut character_body, collider) in entity_q.iter_mut() {
         for _ in 0..character_body.max_slides {
             let linear_velocity = velocity.linvel * time.delta_seconds();
 
-            let vector_cast = linear_velocity
-                .clamp_length_min(character_body.skin_width * character_body.cast_distance);
+            let vector_cast = linear_velocity.clamp_length_min(character_body.cast_distance);
 
-            let collision = rapier
-                .cast_shape(
-                    transform.translation,
-                    transform.rotation,
-                    vector_cast,
-                    collider,
-                    1.0,
-                    true,
-                    QueryFilter::new().exclude_collider(entity),
-                )
-                .map_or(None, |(_, hit)| {
-                    hit.details.map(|details| (hit.toi, details))
-                });
+            let collision = rapier.cast_shape(
+                transform.translation,
+                transform.rotation,
+                vector_cast,
+                collider,
+                1.0,
+                true,
+                filter,
+            );
 
             if collision.is_none() {
+                character_body.last_position = transform.translation;
+
                 transform.translation += linear_velocity;
 
                 break;
             }
 
-            let (time_of_impact, details) = collision.unwrap();
+            let (_, collision) = collision.unwrap();
 
-            let normal = details.normal1;
+            if let TOIStatus::Penetrating = collision.status {
+                transform.translation = character_body.last_position;
+                continue;
+            }
+
+            character_body.last_position = transform.translation;
+
+            let normal = collision.details.unwrap().normal1;
+
+            let time_of_impact = collision.toi;
 
             let mut vector_to_collision = vector_cast * time_of_impact;
 
@@ -94,6 +105,8 @@ fn update(
             {
                 vector_to_collision = vector_to_collision.project_onto(normal);
             } else if vector_to_collision.length() > linear_velocity.length() {
+                character_body.last_position = transform.translation;
+
                 transform.translation += linear_velocity;
                 break;
             }
