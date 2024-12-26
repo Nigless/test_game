@@ -2,7 +2,10 @@ use bevy::{
     gltf::{Gltf, GltfMesh, GltfNode},
     prelude::*,
 };
-use bevy_rapier3d::geometry::{Collider, ComputedColliderShape};
+use bevy_rapier3d::{
+    geometry::{Collider, ComputedColliderShape},
+    prelude::RigidBody,
+};
 
 #[derive(Component)]
 pub struct Model {

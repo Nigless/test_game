@@ -18,12 +18,15 @@ use entities::{
     ghost::{GhostBundle, GhostPlugin},
     traffic_cone::TrafficCone,
 };
+use linker::LinkerPlugin;
 use model::{Model, ModelPlugin};
+use shape_caster::ShapeCasterPlugin;
 mod animation_sequencer;
 mod character_body;
 mod lib;
-
+mod shape_caster;
 use crate::entities::package::Package;
+mod linker;
 
 fn main() {
     App::new()
@@ -41,6 +44,8 @@ fn main() {
             ControlPlugin,
             CharacterBodyPlugin,
             AnimationSequencerPlugin,
+            ShapeCasterPlugin,
+            LinkerPlugin,
         ))
         .insert_resource(AmbientLight {
             color: Color::rgb(1.0, 1.0, 1.0),
