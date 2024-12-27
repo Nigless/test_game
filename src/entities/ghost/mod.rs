@@ -1,17 +1,10 @@
 use std::f32::consts;
-use std::os::linux::raw::stat;
 
-use crate::animation_sequencer::{
-    Animation, AnimationSequencer, AnimationSequencerSystems, Target,
-};
 use crate::camera_controller::CameraController;
-use crate::character_body::CharacterBody;
 use crate::control::{Control, ControlSystems, Input};
 use crate::lib::move_toward;
-use crate::linker::{self, Linker};
+use crate::linker::Linker;
 use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
-
-use bevy::utils::HashMap;
 
 use bevy_rapier3d::dynamics::{GravityScale, Velocity};
 

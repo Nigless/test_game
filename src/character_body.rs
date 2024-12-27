@@ -1,5 +1,3 @@
-use std::f32::consts;
-
 use bevy::{
     app::{App, Plugin},
     ecs::{component::Component, reflect::ReflectComponent},
@@ -9,8 +7,8 @@ use bevy_rapier3d::{
     dynamics::Velocity,
     geometry::Collider,
     pipeline::QueryFilter,
-    plugin::{RapierConfiguration, RapierContext},
-    prelude::{CollisionGroups, QueryFilterFlags, RapierColliderHandle, RigidBody, TOIStatus},
+    plugin::RapierContext,
+    prelude::{QueryFilterFlags, TOIStatus},
 };
 
 #[derive(Component, Reflect)]

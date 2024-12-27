@@ -1,46 +1,32 @@
-use std::{env, f32::consts};
+use std::f32::consts;
 
-use animation_sequencer::AnimationSequencerPlugin;
 use bevy::{
-    core_pipeline::core_2d::graph::input,
     prelude::*,
-    render::{
-        render_resource::{AsBindGroup, ShaderRef},
-        view::window,
-    },
-    tasks::futures_lite::io::Cursor,
+    render::render_resource::{AsBindGroup, ShaderRef},
     window::WindowMode,
 };
 mod camera_controller;
 mod control;
 mod entities;
 mod model;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
 use camera_controller::{CameraControllerPlugin, Spectate};
 use character_body::CharacterBodyPlugin;
 use control::{Control, ControlPlugin, Input};
-use entities::{
-    ghost::{GhostBundle, GhostPlugin},
-    traffic_cone::TrafficCone,
-};
+use entities::ghost::{GhostBundle, GhostPlugin};
 use linker::LinkerPlugin;
 use model::{Model, ModelPlugin};
 use shape_caster::ShapeCasterPlugin;
-mod animation_sequencer;
 mod character_body;
 mod lib;
-mod shape_caster;
-use crate::entities::package::Package;
 mod linker;
+mod shape_caster;
 
 fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
-            WorldInspectorPlugin::new(),
             RapierPhysicsPlugin::<NoUserData>::default(),
-            // RapierDebugRenderPlugin::default(),
             UiMaterialPlugin::<CrosshairMaterial>::default(),
         ))
         .add_plugins((
@@ -49,7 +35,6 @@ fn main() {
             CameraControllerPlugin,
             ControlPlugin,
             CharacterBodyPlugin,
-            AnimationSequencerPlugin,
             ShapeCasterPlugin,
             LinkerPlugin,
         ))
@@ -153,12 +138,4 @@ fn startup(mut commands: Commands, mut crosshair_materials: ResMut<Assets<Crossh
     commands.spawn(GhostBundle::new()).insert(
         Transform::from_xyz(4.0, 2.2, 5.0).with_rotation(Quat::from_rotation_y(consts::PI)),
     );
-
-    commands
-        .spawn(Package::new())
-        .insert(Transform::from_xyz(3.0, 2.0, 0.0));
-
-    commands
-        .spawn(TrafficCone::new())
-        .insert(Transform::from_xyz(3.0, 3.0, 5.0));
 }
