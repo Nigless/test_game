@@ -29,8 +29,7 @@ pub struct ModelPlugin;
 
 impl Plugin for ModelPlugin {
     fn build(&self, app: &mut App) {
-        app.configure_sets(PreUpdate, ModelSystems::Resolve)
-            .add_systems(PreUpdate, (load, resolve).in_set(ModelSystems::Resolve));
+        app.add_systems(First, (load, resolve).in_set(ModelSystems::Resolve));
     }
 }
 

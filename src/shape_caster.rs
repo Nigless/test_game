@@ -4,6 +4,9 @@ use bevy_rapier3d::{
     prelude::{Collider, QueryFilter, QueryFilterFlags},
 };
 
+#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
+pub struct ShapeCasterSystems;
+
 #[derive(Reflect)]
 pub struct CastResult {
     pub distance: f32,
@@ -31,7 +34,7 @@ pub struct ShapeCasterPlugin;
 impl Plugin for ShapeCasterPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<ShapeCaster>()
-            .add_systems(PreUpdate, update);
+            .add_systems(PreUpdate, update.in_set(ShapeCasterSystems));
     }
 }
 

@@ -55,9 +55,7 @@ pub struct Input {
 }
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
-pub enum ControlSystems {
-    Update,
-}
+pub struct ControlSystems;
 
 pub struct ControlPlugin;
 
@@ -71,8 +69,7 @@ impl Plugin for ControlPlugin {
         app.register_type::<Input>()
             .insert_resource(Input::default());
 
-        app.configure_sets(PreUpdate, ControlSystems::Update)
-            .add_systems(PreUpdate, update.in_set(ControlSystems::Update));
+        app.add_systems(PreUpdate, update.in_set(ControlSystems));
     }
 }
 

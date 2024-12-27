@@ -8,7 +8,7 @@ use crate::character_body::CharacterBody;
 use crate::control::{Control, Input};
 use crate::lib::move_toward;
 use crate::linker::{self, Linker};
-use crate::shape_caster::ShapeCaster;
+use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
 
 use bevy::utils::HashMap;
 
@@ -25,9 +25,9 @@ mod entities;
 pub use entities::GhostBundle;
 
 pub const MAX_SLOPE_ANGLE: f32 = consts::PI / 3.8;
-pub const COLLIDER_TRANSITION_SPEED: f32 = 15.0;
+pub const COLLIDER_TRANSITION_SPEED: f32 = 20.0;
 pub const COLLIDER_RADIUS: f32 = 0.3;
-pub const GROUND_WIDTH: f32 = 0.02;
+pub const GROUND_WIDTH: f32 = 0.01;
 pub const SKIN_WIDTH: f32 = 0.01;
 pub const COLLIDER_HALF_HEIGHT: f32 = 1.0 - COLLIDER_RADIUS;
 pub const COLLIDER_CROUCHING_HALF_HEIGHT: f32 = COLLIDER_HALF_HEIGHT * 0.4;
@@ -42,15 +42,18 @@ impl Plugin for GhostPlugin {
             .add_systems(
                 PreUpdate,
                 (
-                    ground_check,
-                    collider,
+                    ground_check.after(ShapeCasterSystems),
+                    collider.after(ground_check),
                     gravity,
                     looking,
-                    moving,
-                    falling.run_if(|input: Res<Input>| input.moving.length() > 0.0),
-                    jumping.run_if(|input: Res<Input>| input.jumping),
-                )
-                    .chain(),
+                    moving.after(ground_check),
+                    falling
+                        .after(ground_check)
+                        .run_if(|input: Res<Input>| input.moving.length() > 0.0),
+                    jumping
+                        .after(ground_check)
+                        .run_if(|input: Res<Input>| input.jumping),
+                ),
             );
     }
 }
@@ -106,7 +109,7 @@ fn ground_check(
 
         if let Some(cast_up_result) = &cast_up.result {
             if cast_up_result.distance + cast_down_result.distance
-                < COLLIDER_HALF_HEIGHT * 2.0 + SKIN_WIDTH
+                < (COLLIDER_HALF_HEIGHT + SKIN_WIDTH) * 2.0
             {
                 status.can_standup = false;
             }
@@ -190,15 +193,11 @@ fn collider(
 }
 
 fn gravity(
-    mut entity_q: Query<(&mut Velocity, &Status, Option<&GravityScale>)>,
+    mut entity_q: Query<(&mut Velocity, Option<&GravityScale>)>,
     time: Res<Time>,
     config: Res<RapierConfiguration>,
 ) {
-    for (mut velocity, status, gravity) in entity_q.iter_mut() {
-        if status.surface.is_some() {
-            continue;
-        }
-
+    for (mut velocity, gravity) in entity_q.iter_mut() {
         let mut scale = 1.0;
 
         if let Some(gravity) = gravity {
