@@ -5,9 +5,9 @@ use bevy::{
     prelude::{Bundle, Camera3dBundle, Projection, TransformBundle},
     utils::default,
 };
-use bevy_rapier3d::prelude::{Collider, CollisionGroups, GravityScale, Group, Sensor, Velocity};
+use bevy_rapier3d::prelude::{Collider, GravityScale, Sensor, Velocity};
 
-use crate::{character_body::CharacterBody, linker::Linker, shape_caster::ShapeCaster};
+use crate::{character_body::CharacterBody, shape_caster::ShapeCaster};
 
 use super::{
     components::*, COLLIDER_CROUCHING_HALF_HEIGHT, COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS,

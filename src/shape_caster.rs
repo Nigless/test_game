@@ -1,4 +1,4 @@
-use bevy::{prelude::*, utils::HashMap};
+use bevy::prelude::*;
 use bevy_rapier3d::{
     plugin::RapierContext,
     prelude::{Collider, QueryFilter, QueryFilterFlags},
