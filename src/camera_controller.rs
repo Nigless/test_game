@@ -24,12 +24,10 @@ pub struct CameraControllerPlugin;
 
 impl Plugin for CameraControllerPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<CameraController>()
-            .configure_sets(PreUpdate, CameraControllerSystems::Resolve)
-            .add_systems(
-                PreUpdate,
-                (clean_up, resolve).in_set(CameraControllerSystems::Resolve),
-            );
+        app.register_type::<CameraController>().add_systems(
+            First,
+            (clean_up, resolve).in_set(CameraControllerSystems::Resolve),
+        );
     }
 }
 

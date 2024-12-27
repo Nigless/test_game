@@ -75,6 +75,12 @@ impl UiMaterial for CrosshairMaterial {
 fn screen_mode_update(input: Res<Input>, mut window_q: Query<&mut Window>) {
     let mut window = window_q.get_single_mut().unwrap();
 
+    if window.mode == WindowMode::Fullscreen {
+        let x = window.resolution.width() / 2.0;
+        let y = window.resolution.height() / 2.0;
+        window.set_cursor_position(Some(Vec2::new(x, y)));
+    }
+
     if !input.full_screen_switching {
         return;
     }
