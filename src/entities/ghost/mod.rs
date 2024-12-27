@@ -1,11 +1,12 @@
 use std::f32::consts;
+use std::os::linux::raw::stat;
 
 use crate::animation_sequencer::{
     Animation, AnimationSequencer, AnimationSequencerSystems, Target,
 };
 use crate::camera_controller::CameraController;
 use crate::character_body::CharacterBody;
-use crate::control::{Control, Input};
+use crate::control::{Control, ControlSystems, Input};
 use crate::lib::move_toward;
 use crate::linker::{self, Linker};
 use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
@@ -43,14 +44,16 @@ impl Plugin for GhostPlugin {
                 PreUpdate,
                 (
                     ground_check.after(ShapeCasterSystems),
-                    collider.after(ground_check),
+                    collider.after(ControlSystems).after(ShapeCasterSystems),
                     gravity,
-                    looking,
-                    moving.after(ground_check),
+                    looking.after(ControlSystems),
+                    moving.after(ControlSystems).after(ground_check),
                     falling
+                        .after(ControlSystems)
                         .after(ground_check)
                         .run_if(|input: Res<Input>| input.moving.length() > 0.0),
                     jumping
+                        .after(ControlSystems)
                         .after(ground_check)
                         .run_if(|input: Res<Input>| input.jumping),
                 ),
@@ -154,6 +157,7 @@ fn collider(
     input: Res<Input>,
     time: Res<Time>,
     mut entity_q: Query<(&mut Collider, &mut Status, &mut Transform, &Linker), With<Control>>,
+    caster_q: Query<&ShapeCaster, Without<Status>>,
     mut head_q: Query<&mut Transform, Without<Status>>,
 ) {
     for (mut collider, mut status, mut transform, linker) in entity_q.iter_mut() {
@@ -180,15 +184,36 @@ fn collider(
             height_diff = target_height - status.current_collider_height;
         }
 
+        let original_height = status.current_collider_height;
+
         status.current_collider_height += height_diff;
 
         head_transform.translation += Vec3::Y * height_diff;
 
-        if status.surface.is_some() {
-            transform.translation += -config.gravity.normalize() * height_diff;
+        *collider = Collider::capsule_y(status.current_collider_height, COLLIDER_RADIUS);
+
+        let cast_down = caster_q.get(*linker.get("cast_down").unwrap()).unwrap();
+
+        if cast_down.result.is_none() {
+            continue;
         }
 
-        *collider = Collider::capsule_y(status.current_collider_height, COLLIDER_RADIUS);
+        let result = cast_down.result.as_ref().unwrap();
+
+        if height_diff < 0.0 {
+            if result.distance < original_height + SKIN_WIDTH + GROUND_WIDTH {
+                transform.translation += -config.gravity.normalize() * height_diff;
+            }
+
+            continue;
+        }
+
+        if result.distance > status.current_collider_height + SKIN_WIDTH + GROUND_WIDTH {
+            continue;
+        }
+
+        transform.translation += -config.gravity.normalize()
+            * (status.current_collider_height + SKIN_WIDTH - result.distance);
     }
 }
 
