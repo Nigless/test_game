@@ -8,11 +8,12 @@ use bevy_rapier3d::{
     geometry::Collider,
     pipeline::QueryFilter,
     plugin::RapierContext,
-    prelude::{QueryFilterFlags, ShapeCastOptions, ShapeCastStatus},
+    prelude::{ShapeCastOptions, ShapeCastStatus},
 };
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
+#[require(Transform, Velocity)]
 pub struct CharacterBody {
     pub skin_width: f32,
     pub max_slides: i32,
@@ -37,12 +38,15 @@ impl CharacterBody {
     }
 }
 
+#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
+pub struct CharacterBodySystems;
+
 pub struct CharacterBodyPlugin;
 
 impl Plugin for CharacterBodyPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<CharacterBody>()
-            .add_systems(Update, update);
+            .add_systems(PreUpdate, update.in_set(CharacterBodySystems));
     }
 }
 
@@ -50,37 +54,45 @@ fn update(
     time: Res<Time>,
     rapier: Query<&RapierContext>,
     mut entity_q: Query<
-        (&mut Velocity, &mut Transform, &mut CharacterBody, &Collider),
+        (
+            Entity,
+            &mut Velocity,
+            &mut Transform,
+            &GlobalTransform,
+            &mut CharacterBody,
+            &Collider,
+        ),
         Without<RapierContext>,
     >,
 ) {
-    let filter = QueryFilter::from(QueryFilterFlags::EXCLUDE_SENSORS);
     let rapier = rapier.get_single().unwrap();
 
-    for (mut velocity, mut transform, mut character_body, collider) in entity_q.iter_mut() {
+    for (entity, mut velocity, mut transform, global_transform, mut character_body, collider) in
+        entity_q.iter_mut()
+    {
+        let filter = QueryFilter::new().exclude_collider(entity);
+
         for _ in 0..character_body.max_slides {
             let linear_velocity = velocity.linvel * time.delta_secs();
 
             let vector_cast = linear_velocity.clamp_length_min(character_body.cast_distance);
 
             let collision = rapier.cast_shape(
-                transform.translation,
-                transform.rotation,
+                global_transform.translation(),
+                global_transform.rotation(),
                 vector_cast,
                 collider,
                 ShapeCastOptions::default(),
                 filter,
             );
 
-            if collision.is_none() {
+            let Some((_, collision)) = collision else {
                 character_body.last_position = transform.translation;
 
                 transform.translation += linear_velocity;
 
                 break;
-            }
-
-            let (_, collision) = collision.unwrap();
+            };
 
             if let ShapeCastStatus::PenetratingOrWithinTargetDist = collision.status {
                 transform.translation = character_body.last_position;
