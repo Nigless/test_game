@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 use bevy_rapier3d::{
     plugin::RapierContext,
-    prelude::{Collider, QueryFilter, QueryFilterFlags},
+    prelude::{Collider, QueryFilter, QueryFilterFlags, ShapeCastOptions},
+    rapier,
 };
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
@@ -39,10 +40,12 @@ impl Plugin for ShapeCasterPlugin {
 }
 
 fn update(
-    rapier: Res<RapierContext>,
-    mut entity_q: Query<(&mut ShapeCaster, &Collider, &GlobalTransform)>,
+    rapier_q: Query<&RapierContext>,
+    mut entity_q: Query<(&mut ShapeCaster, &Collider, &GlobalTransform), Without<RapierContext>>,
 ) {
     let filter = QueryFilter::from(QueryFilterFlags::EXCLUDE_SENSORS);
+
+    let rapier = rapier_q.get_single().unwrap();
 
     for (mut shape_caster, collider, transform) in entity_q.iter_mut() {
         if let Some((time_of_impact, normal)) = rapier
@@ -51,12 +54,12 @@ fn update(
                 transform.to_scale_rotation_translation().1,
                 shape_caster.direction,
                 collider,
-                1.0,
-                true,
+                ShapeCastOptions::default(),
                 filter,
             )
             .map_or(None, |(_, hit)| {
-                hit.details.map(|details| (hit.toi, details.normal1))
+                hit.details
+                    .map(|details| (hit.time_of_impact, details.normal1))
             })
         {
             shape_caster.result = Some(CastResult {
