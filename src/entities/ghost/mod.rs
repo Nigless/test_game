@@ -42,13 +42,10 @@ impl Plugin for GhostPlugin {
             .register_type::<Status>()
             .configure_sets(
                 PreUpdate,
-                (
-                    GhostSystems::Prepare,
-                    GhostSystems::Update
-                        .after(CharacterBodySystems)
-                        .after(ShapeCasterSystems)
-                        .after(GhostSystems::Prepare),
-                ),
+                (GhostSystems::Prepare, GhostSystems::Update)
+                    .chain()
+                    .after(ShapeCasterSystems)
+                    .before(CharacterBodySystems),
             )
             .add_systems(First, resolve.in_set(GhostSystems::Resolve))
             .add_systems(
