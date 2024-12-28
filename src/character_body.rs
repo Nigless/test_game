@@ -2,6 +2,7 @@ use bevy::{
     app::{App, Plugin},
     ecs::{component::Component, reflect::ReflectComponent},
     prelude::*,
+    transform::systems::propagate_transforms,
 };
 use bevy_rapier3d::{
     dynamics::Velocity,
@@ -45,8 +46,12 @@ pub struct CharacterBodyPlugin;
 
 impl Plugin for CharacterBodyPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<CharacterBody>()
-            .add_systems(PreUpdate, update.in_set(CharacterBodySystems));
+        app.register_type::<CharacterBody>().add_systems(
+            PreUpdate,
+            (propagate_transforms, update)
+                .chain()
+                .in_set(CharacterBodySystems),
+        );
     }
 }
 

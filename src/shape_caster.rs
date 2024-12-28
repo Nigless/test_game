@@ -70,7 +70,7 @@ fn update(
         if let Some((time_of_impact, normal)) = rapier
             .cast_shape(
                 transform.translation(),
-                transform.to_scale_rotation_translation().1,
+                transform.rotation(),
                 shape_caster.direction,
                 &shape_caster.collider,
                 ShapeCastOptions::default(),
