@@ -9,6 +9,8 @@ use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
 
 use bevy_rapier3d::dynamics::{GravityScale, Velocity};
 
+use bevy_rapier3d::parry::math::{Point, Vector};
+use bevy_rapier3d::parry::shape::SharedShape;
 use bevy_rapier3d::plugin::RapierConfiguration;
 use bevy_rapier3d::prelude::Collider;
 
@@ -199,7 +201,8 @@ fn collider(
 
         head_transform.translation += Vec3::Y * height_diff;
 
-        *collider = Collider::capsule_y(status.current_collider_height, COLLIDER_RADIUS);
+        let p = Point::from(Vec3::Y * status.current_collider_height);
+        collider.raw = SharedShape::capsule(-p, p, COLLIDER_RADIUS);
 
         let cast_down = caster_q.get(*linker.get("cast_down").unwrap()).unwrap();
         let cast_up = caster_q.get(*linker.get("cast_up").unwrap()).unwrap();
