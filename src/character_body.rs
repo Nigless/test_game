@@ -8,7 +8,7 @@ use bevy_rapier3d::{
     geometry::Collider,
     pipeline::QueryFilter,
     plugin::RapierContext,
-    prelude::{QueryFilterFlags, TOIStatus},
+    prelude::{QueryFilterFlags, ShapeCastOptions, ShapeCastStatus},
 };
 
 #[derive(Component, Reflect)]
@@ -48,14 +48,18 @@ impl Plugin for CharacterBodyPlugin {
 
 fn update(
     time: Res<Time>,
-    rapier: Res<RapierContext>,
-    mut entity_q: Query<(&mut Velocity, &mut Transform, &mut CharacterBody, &Collider)>,
+    rapier: Query<&RapierContext>,
+    mut entity_q: Query<
+        (&mut Velocity, &mut Transform, &mut CharacterBody, &Collider),
+        Without<RapierContext>,
+    >,
 ) {
     let filter = QueryFilter::from(QueryFilterFlags::EXCLUDE_SENSORS);
+    let rapier = rapier.get_single().unwrap();
 
     for (mut velocity, mut transform, mut character_body, collider) in entity_q.iter_mut() {
         for _ in 0..character_body.max_slides {
-            let linear_velocity = velocity.linvel * time.delta_seconds();
+            let linear_velocity = velocity.linvel * time.delta_secs();
 
             let vector_cast = linear_velocity.clamp_length_min(character_body.cast_distance);
 
@@ -64,8 +68,7 @@ fn update(
                 transform.rotation,
                 vector_cast,
                 collider,
-                1.0,
-                true,
+                ShapeCastOptions::default(),
                 filter,
             );
 
@@ -79,7 +82,7 @@ fn update(
 
             let (_, collision) = collision.unwrap();
 
-            if let TOIStatus::Penetrating = collision.status {
+            if let ShapeCastStatus::PenetratingOrWithinTargetDist = collision.status {
                 transform.translation = character_body.last_position;
                 continue;
             }
@@ -88,7 +91,7 @@ fn update(
 
             let normal = collision.details.unwrap().normal1;
 
-            let time_of_impact = collision.toi;
+            let time_of_impact = collision.time_of_impact;
 
             let mut vector_to_collision = vector_cast * time_of_impact;
 

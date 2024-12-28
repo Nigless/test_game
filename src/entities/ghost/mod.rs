@@ -6,6 +6,7 @@ use crate::lib::move_toward;
 use crate::linker::Linker;
 use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
 
+use bevy::utils::HashMap;
 use bevy_rapier3d::dynamics::{GravityScale, Velocity};
 
 use bevy_rapier3d::plugin::RapierConfiguration;
@@ -19,7 +20,7 @@ mod entities;
 pub use entities::GhostBundle;
 
 pub const MAX_SLOPE_ANGLE: f32 = consts::PI / 3.8;
-pub const COLLIDER_TRANSITION_SPEED: f32 = 20.0;
+pub const COLLIDER_TRANSITION_SPEED: f32 = 200.0;
 pub const COLLIDER_RADIUS: f32 = 0.3;
 pub const GROUND_WIDTH: f32 = 0.01;
 pub const SKIN_WIDTH: f32 = 0.01;
@@ -85,9 +86,11 @@ fn resolve(mut commands: Commands, mut entity_q: Query<Entity, With<Unresolved>>
 
 fn ground_check(
     mut entity_q: Query<(&Linker, &mut Status)>,
-    caster_q: Query<&ShapeCaster, Without<Parameters>>,
-    config: Res<RapierConfiguration>,
+    caster_q: Query<&ShapeCaster, Without<Status>>,
+    config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
+    let config = config_q.get_single().unwrap();
+
     for (linker, mut status) in entity_q.iter_mut() {
         status.can_standup = true;
 
@@ -146,13 +149,15 @@ fn looking(
 }
 
 fn collider(
-    config: Res<RapierConfiguration>,
     input: Res<Input>,
     time: Res<Time>,
     mut entity_q: Query<(&mut Collider, &mut Status, &mut Transform, &Linker), With<Control>>,
     caster_q: Query<&ShapeCaster, Without<Status>>,
     mut head_q: Query<&mut Transform, Without<Status>>,
+    config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
+    let config = config_q.get_single().unwrap();
+
     for (mut collider, mut status, mut transform, linker) in entity_q.iter_mut() {
         let target_height = if input.crouching {
             COLLIDER_CROUCHING_HALF_HEIGHT
@@ -168,10 +173,10 @@ fn collider(
 
         let mut head_transform = head_q.get_mut(*linker.get("head").unwrap()).unwrap();
 
-        let mut height_diff = status.current_collider_height.lerp(
-            target_height,
-            time.delta_seconds() * COLLIDER_TRANSITION_SPEED,
-        ) - status.current_collider_height;
+        let mut height_diff = status
+            .current_collider_height
+            .lerp(target_height, time.delta_secs() * COLLIDER_TRANSITION_SPEED)
+            - status.current_collider_height;
 
         if height_diff.abs() < 0.0001 {
             height_diff = target_height - status.current_collider_height;
@@ -186,35 +191,46 @@ fn collider(
         *collider = Collider::capsule_y(status.current_collider_height, COLLIDER_RADIUS);
 
         let cast_down = caster_q.get(*linker.get("cast_down").unwrap()).unwrap();
+        let cast_up = caster_q.get(*linker.get("cast_up").unwrap()).unwrap();
 
-        if cast_down.result.is_none() {
+        let Some(cast_down_result) = cast_down.result.as_ref() else {
             continue;
-        }
-
-        let result = cast_down.result.as_ref().unwrap();
+        };
 
         if height_diff < 0.0 {
-            if result.distance < original_height + SKIN_WIDTH + GROUND_WIDTH {
+            if cast_down_result.distance < original_height + SKIN_WIDTH + GROUND_WIDTH {
                 transform.translation += -config.gravity.normalize() * height_diff;
             }
 
             continue;
         }
 
-        if result.distance > status.current_collider_height + SKIN_WIDTH + GROUND_WIDTH {
+        if let Some(cast_up_result) = cast_up.result.as_ref() {
+            if cast_up_result.distance < status.current_collider_height + SKIN_WIDTH + GROUND_WIDTH
+            {
+                transform.translation -= -config.gravity.normalize()
+                    * (status.current_collider_height + SKIN_WIDTH - cast_up_result.distance);
+
+                continue;
+            }
+        };
+
+        if cast_down_result.distance > status.current_collider_height + SKIN_WIDTH + GROUND_WIDTH {
             continue;
         }
 
         transform.translation += -config.gravity.normalize()
-            * (status.current_collider_height + SKIN_WIDTH - result.distance);
+            * (status.current_collider_height + SKIN_WIDTH - cast_down_result.distance);
     }
 }
 
 fn gravity(
     mut entity_q: Query<(&mut Velocity, Option<&GravityScale>)>,
     time: Res<Time>,
-    config: Res<RapierConfiguration>,
+    config_q: Query<&RapierConfiguration, Without<Velocity>>,
 ) {
+    let config = config_q.get_single().unwrap();
+
     for (mut velocity, gravity) in entity_q.iter_mut() {
         let mut scale = 1.0;
 
@@ -222,7 +238,7 @@ fn gravity(
             scale = gravity.0
         }
 
-        velocity.linvel += config.gravity * scale * time.delta_seconds();
+        velocity.linvel += config.gravity * scale * time.delta_secs();
     }
 }
 
@@ -266,10 +282,12 @@ fn moving(
 }
 
 fn falling(
-    config: Res<RapierConfiguration>,
     input: Res<Input>,
     mut entity_q: Query<(&mut Velocity, &Transform, &Parameters, &Status)>,
+    config_q: Query<&RapierConfiguration, Without<Status>>,
 ) {
+    let config = config_q.get_single().unwrap();
+
     for (mut velocity, transform, parameters, status) in entity_q.iter_mut() {
         if status.surface.is_some() {
             continue;
