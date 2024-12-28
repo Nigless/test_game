@@ -1,10 +1,6 @@
 use std::f32::consts;
 
-use bevy::{
-    prelude::*,
-    render::render_resource::{AsBindGroup, ShaderRef},
-    window::{PresentMode, WindowMode},
-};
+use bevy::{prelude::*, window::WindowMode};
 mod camera_controller;
 mod control;
 mod entities;
@@ -72,7 +68,11 @@ fn screen_mode_update(input: Res<Input>, mut window: Single<&mut Window>) {
     window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Current)
 }
 
-fn startup(mut commands: Commands) {
+fn startup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     commands.spawn((Model::new("test_scene.glb"), RigidBody::Fixed));
 
     commands.spawn((
@@ -96,4 +96,14 @@ fn startup(mut commands: Commands) {
     commands.spawn(GhostBundle::new()).insert(
         Transform::from_xyz(4.0, 2.2, 5.0).with_rotation(Quat::from_rotation_y(consts::PI)),
     );
+
+    commands.spawn((
+        Name::new("Package"),
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
+        Collider::cuboid(0.5, 0.5, 0.5),
+        RigidBody::Dynamic,
+        Transform::from_xyz(0.0, 10.0, 10.0),
+        Velocity::default(),
+    ));
 }

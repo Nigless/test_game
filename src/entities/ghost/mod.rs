@@ -1,12 +1,12 @@
 use std::f32::consts;
 
 use crate::camera_controller::CameraController;
-use crate::control::{Control, ControlSystems, Input};
+use crate::character_body::CharacterBodySystems;
+use crate::control::{Control, Input};
 use crate::lib::move_toward;
 use crate::linker::Linker;
 use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
 
-use bevy::utils::HashMap;
 use bevy_rapier3d::dynamics::{GravityScale, Velocity};
 
 use bevy_rapier3d::plugin::RapierConfiguration;
@@ -20,12 +20,19 @@ mod entities;
 pub use entities::GhostBundle;
 
 pub const MAX_SLOPE_ANGLE: f32 = consts::PI / 3.8;
-pub const COLLIDER_TRANSITION_SPEED: f32 = 200.0;
+pub const COLLIDER_TRANSITION_SPEED: f32 = 20.0;
 pub const COLLIDER_RADIUS: f32 = 0.3;
 pub const GROUND_WIDTH: f32 = 0.01;
 pub const SKIN_WIDTH: f32 = 0.01;
 pub const COLLIDER_HALF_HEIGHT: f32 = 1.0 - COLLIDER_RADIUS;
 pub const COLLIDER_CROUCHING_HALF_HEIGHT: f32 = COLLIDER_HALF_HEIGHT * 0.4;
+
+#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
+pub enum GhostSystems {
+    Resolve,
+    Prepare,
+    Update,
+}
 
 pub struct GhostPlugin;
 
@@ -33,24 +40,31 @@ impl Plugin for GhostPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Parameters>()
             .register_type::<Status>()
-            .add_systems(First, resolve)
+            .configure_sets(
+                PreUpdate,
+                (
+                    GhostSystems::Prepare,
+                    GhostSystems::Update
+                        .after(CharacterBodySystems)
+                        .after(ShapeCasterSystems)
+                        .after(GhostSystems::Prepare),
+                ),
+            )
+            .add_systems(First, resolve.in_set(GhostSystems::Resolve))
+            .add_systems(
+                PreUpdate,
+                (ground_check, looking).in_set(GhostSystems::Prepare),
+            )
             .add_systems(
                 PreUpdate,
                 (
-                    ground_check.after(ShapeCasterSystems),
-                    collider.after(ControlSystems).after(ShapeCasterSystems),
+                    collider,
                     gravity,
-                    looking.after(ControlSystems),
-                    moving.after(ControlSystems).after(ground_check),
-                    falling
-                        .after(ControlSystems)
-                        .after(ground_check)
-                        .run_if(|input: Res<Input>| input.moving.length() > 0.0),
-                    jumping
-                        .after(ControlSystems)
-                        .after(ground_check)
-                        .run_if(|input: Res<Input>| input.jumping),
-                ),
+                    moving,
+                    falling.run_if(|input: Res<Input>| input.moving.length() > 0.0),
+                    jumping.run_if(|input: Res<Input>| input.jumping),
+                )
+                    .in_set(GhostSystems::Update),
             );
     }
 }
@@ -193,34 +207,31 @@ fn collider(
         let cast_down = caster_q.get(*linker.get("cast_down").unwrap()).unwrap();
         let cast_up = caster_q.get(*linker.get("cast_up").unwrap()).unwrap();
 
-        let Some(cast_down_result) = cast_down.result.as_ref() else {
-            continue;
-        };
-
-        if height_diff < 0.0 {
-            if cast_down_result.distance < original_height + SKIN_WIDTH + GROUND_WIDTH {
-                transform.translation += -config.gravity.normalize() * height_diff;
-            }
-
-            continue;
-        }
-
-        if let Some(cast_up_result) = cast_up.result.as_ref() {
-            if cast_up_result.distance < status.current_collider_height + SKIN_WIDTH + GROUND_WIDTH
-            {
-                transform.translation -= -config.gravity.normalize()
-                    * (status.current_collider_height + SKIN_WIDTH - cast_up_result.distance);
+        if let Some(result) = cast_down.result.as_ref() {
+            if height_diff < 0.0 {
+                if result.distance < original_height + SKIN_WIDTH + GROUND_WIDTH {
+                    transform.translation += -config.gravity.normalize() * height_diff;
+                }
 
                 continue;
             }
-        };
 
-        if cast_down_result.distance > status.current_collider_height + SKIN_WIDTH + GROUND_WIDTH {
-            continue;
+            if result.distance < status.current_collider_height + SKIN_WIDTH + GROUND_WIDTH {
+                transform.translation += -config.gravity.normalize()
+                    * (status.current_collider_height + SKIN_WIDTH - result.distance);
+
+                continue;
+            }
         }
 
-        transform.translation += -config.gravity.normalize()
-            * (status.current_collider_height + SKIN_WIDTH - cast_down_result.distance);
+        if let Some(result) = cast_up.result.as_ref() {
+            if result.distance > status.current_collider_height + SKIN_WIDTH + GROUND_WIDTH {
+                continue;
+            }
+
+            transform.translation -= -config.gravity.normalize()
+                * (status.current_collider_height + SKIN_WIDTH - result.distance);
+        };
     }
 }
 

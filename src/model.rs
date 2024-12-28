@@ -1,7 +1,4 @@
-use bevy::{
-    gltf::{Gltf, GltfMesh, GltfNode},
-    prelude::*,
-};
+use bevy::prelude::*;
 use bevy_rapier3d::geometry::{Collider, ComputedColliderShape};
 
 #[derive(Component)]

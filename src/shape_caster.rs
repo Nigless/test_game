@@ -1,8 +1,7 @@
 use bevy::prelude::*;
 use bevy_rapier3d::{
     plugin::RapierContext,
-    prelude::{Collider, QueryFilter, QueryFilterFlags, ShapeCastOptions},
-    rapier,
+    prelude::{Collider, QueryFilter, ShapeCastOptions},
 };
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
@@ -16,17 +15,28 @@ pub struct CastResult {
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
+#[require(Transform)]
 pub struct ShapeCaster {
+    #[reflect(ignore)]
+    pub collider: Collider,
     pub direction: Vec3,
     pub result: Option<CastResult>,
+    pub exclude_parent: bool,
 }
 
 impl ShapeCaster {
-    pub fn new(direction: Vec3) -> Self {
+    pub fn new(collider: Collider, direction: Vec3) -> Self {
         Self {
+            collider,
             direction,
             result: None,
+            exclude_parent: false,
         }
+    }
+
+    pub fn exclude_parent(mut self) -> Self {
+        self.exclude_parent = true;
+        self
     }
 }
 
@@ -41,19 +51,28 @@ impl Plugin for ShapeCasterPlugin {
 
 fn update(
     rapier_q: Query<&RapierContext>,
-    mut entity_q: Query<(&mut ShapeCaster, &Collider, &GlobalTransform), Without<RapierContext>>,
+    mut entity_q: Query<
+        (&mut ShapeCaster, &GlobalTransform, Option<&Parent>),
+        Without<RapierContext>,
+    >,
 ) {
-    let filter = QueryFilter::from(QueryFilterFlags::EXCLUDE_SENSORS);
-
     let rapier = rapier_q.get_single().unwrap();
 
-    for (mut shape_caster, collider, transform) in entity_q.iter_mut() {
+    for (mut shape_caster, transform, parent) in entity_q.iter_mut() {
+        let mut filter = QueryFilter::default();
+
+        if let Some(parent) = parent {
+            if shape_caster.exclude_parent {
+                filter = filter.exclude_collider(parent.get());
+            }
+        }
+
         if let Some((time_of_impact, normal)) = rapier
             .cast_shape(
                 transform.translation(),
                 transform.to_scale_rotation_translation().1,
                 shape_caster.direction,
-                collider,
+                &shape_caster.collider,
                 ShapeCastOptions::default(),
                 filter,
             )
