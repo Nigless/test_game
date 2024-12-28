@@ -252,28 +252,35 @@ fn gravity(
 
 fn moving(
     input: Res<Input>,
-    mut entity_q: Query<(&mut Velocity, &Transform, &Parameters, &Status), With<Control>>,
+    mut entity_q: Query<(
+        &mut Velocity,
+        &Transform,
+        &Parameters,
+        &Status,
+        Option<&Control>,
+    )>,
 ) {
-    for (mut velocity, transform, parameters, status) in entity_q.iter_mut() {
-        if status.surface.is_none() {
+    for (mut velocity, transform, parameters, status, control) in entity_q.iter_mut() {
+        let Some(ground_surface) = status.surface else {
             continue;
-        }
-
+        };
         let mut speed = parameters.walking_speed;
 
-        if input.running && input.moving.y <= 0.0 {
-            speed = parameters.running_speed;
-        }
+        let mut direction = Vec3::ZERO;
 
-        if input.crouching || !status.can_standup {
-            speed = parameters.crouching_speed;
-        }
+        if control.is_some() {
+            if input.running && input.moving.y <= 0.0 {
+                speed = parameters.running_speed;
+            }
 
-        let ground_surface = status.surface.unwrap();
+            if input.crouching || !status.can_standup {
+                speed = parameters.crouching_speed;
+            }
 
-        let direction = Quat::from_rotation_arc(Vec3::Y, ground_surface)
-            * transform.rotation
-            * Vec3::new(input.moving.x, 0.0, input.moving.y).normalize_or_zero();
+            direction = Quat::from_rotation_arc(Vec3::Y, ground_surface)
+                * transform.rotation
+                * Vec3::new(input.moving.x, 0.0, input.moving.y).normalize_or_zero();
+        };
 
         let vertical_velocity = velocity.linvel.project_onto(ground_surface);
 
@@ -291,7 +298,7 @@ fn moving(
 
 fn falling(
     input: Res<Input>,
-    mut entity_q: Query<(&mut Velocity, &Transform, &Parameters, &Status)>,
+    mut entity_q: Query<(&mut Velocity, &Transform, &Parameters, &Status), With<Control>>,
     config_q: Query<&RapierConfiguration, Without<Status>>,
 ) {
     let config = config_q.get_single().unwrap();
