@@ -14,12 +14,12 @@ pub struct Unresolved;
 pub struct Parameters {
     pub walking_speed: f32,
     pub falling_speed: f32,
+    pub running_speed: f32,
+    pub crouching_speed: f32,
     pub falling_acceleration: f32,
     pub standing_acceleration: f32,
     pub standing_jump_height: f32,
     pub crouching_jump_height: f32,
-    pub running_speed: f32,
-    pub crouching_speed: f32,
 }
 
 impl Default for Parameters {
@@ -28,8 +28,8 @@ impl Default for Parameters {
             walking_speed: 4.0,
             running_speed: 8.0,
             falling_speed: 2.0,
-            falling_acceleration: 0.05,
-            standing_acceleration: 0.4,
+            falling_acceleration: 3.0,
+            standing_acceleration: 40.0,
             standing_jump_height: 4.0,
             crouching_jump_height: 2.0,
             crouching_speed: 2.0,
