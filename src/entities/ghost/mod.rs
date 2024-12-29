@@ -1,7 +1,7 @@
 use std::f32::consts;
 
 use crate::camera_controller::CameraController;
-use crate::character_body::CharacterBodySystems;
+use crate::character_body::{CharacterBody, CharacterBodySystems};
 use crate::control::{Control, Input};
 use crate::lib::move_toward;
 use crate::linker::Linker;
@@ -98,13 +98,13 @@ fn resolve(mut commands: Commands, mut entity_q: Query<Entity, With<Unresolved>>
 }
 
 fn ground_check(
-    mut entity_q: Query<(&Linker, &mut Status)>,
+    mut entity_q: Query<(&Linker, &mut Status, &CharacterBody)>,
     caster_q: Query<&ShapeCaster, Without<Status>>,
     config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
     let config = config_q.get_single().unwrap();
 
-    for (linker, mut status) in entity_q.iter_mut() {
+    for (linker, mut status, body) in entity_q.iter_mut() {
         status.can_standup = true;
 
         status.surface = None;
@@ -115,13 +115,15 @@ fn ground_check(
             continue;
         }
 
-        let cast_up = caster_q.get(*linker.get("cast_up").unwrap()).unwrap();
+        let Some(cast_down_result) = cast_down.result.as_ref() else {
+            continue;
+        };
 
-        let cast_down_result = cast_down.result.as_ref().unwrap();
+        let cast_up = caster_q.get(*linker.get("cast_up").unwrap()).unwrap();
 
         if let Some(cast_up_result) = &cast_up.result {
             if cast_up_result.distance + cast_down_result.distance
-                < (COLLIDER_HALF_HEIGHT + SKIN_WIDTH) * 2.0
+                < (COLLIDER_HALF_HEIGHT + body.skin_width) * 2.0
             {
                 status.can_standup = false;
             }
@@ -135,7 +137,9 @@ fn ground_check(
             continue;
         }
 
-        if cast_down_result.distance > status.current_collider_height + SKIN_WIDTH + GROUND_WIDTH {
+        if cast_down_result.distance
+            > status.current_collider_height + body.skin_width + GROUND_WIDTH
+        {
             continue;
         }
 
@@ -164,14 +168,23 @@ fn looking(
 fn collider(
     input: Res<Input>,
     time: Res<Time>,
-    mut entity_q: Query<(&mut Collider, &mut Status, &mut Transform, &Linker), With<Control>>,
+    mut entity_q: Query<
+        (
+            &mut Collider,
+            &mut Status,
+            &mut Transform,
+            &Linker,
+            &CharacterBody,
+        ),
+        With<Control>,
+    >,
     caster_q: Query<&ShapeCaster, Without<Status>>,
     mut head_q: Query<&mut Transform, Without<Status>>,
     config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
     let config = config_q.get_single().unwrap();
 
-    for (mut collider, mut status, mut transform, linker) in entity_q.iter_mut() {
+    for (mut collider, mut status, mut transform, linker, body) in entity_q.iter_mut() {
         let target_height = if input.crouching {
             COLLIDER_CROUCHING_HALF_HEIGHT
         } else if status.can_standup {
@@ -191,7 +204,9 @@ fn collider(
             .lerp(target_height, time.delta_secs() * COLLIDER_TRANSITION_SPEED)
             - status.current_collider_height;
 
-        if height_diff.abs() < 0.0001 {
+        if height_diff.abs() < 0.0001
+            || height_diff.abs() > (target_height - status.current_collider_height).abs()
+        {
             height_diff = target_height - status.current_collider_height;
         }
 
@@ -201,36 +216,35 @@ fn collider(
 
         head_transform.translation += Vec3::Y * height_diff;
 
-        let p = Point::from(Vec3::Y * status.current_collider_height);
-        collider.raw = SharedShape::capsule(-p, p, COLLIDER_RADIUS);
+        *collider = Collider::capsule_y(status.current_collider_height, COLLIDER_RADIUS);
 
         let cast_down = caster_q.get(*linker.get("cast_down").unwrap()).unwrap();
         let cast_up = caster_q.get(*linker.get("cast_up").unwrap()).unwrap();
 
         if let Some(result) = cast_down.result.as_ref() {
             if height_diff < 0.0 {
-                if result.distance < original_height + SKIN_WIDTH + GROUND_WIDTH {
+                if result.distance < original_height + body.skin_width + GROUND_WIDTH {
                     transform.translation += -config.gravity.normalize() * height_diff;
                 }
 
                 continue;
             }
 
-            if result.distance < status.current_collider_height + SKIN_WIDTH + GROUND_WIDTH {
+            if result.distance < status.current_collider_height + body.skin_width + GROUND_WIDTH {
                 transform.translation += -config.gravity.normalize()
-                    * (status.current_collider_height + SKIN_WIDTH - result.distance);
+                    * (status.current_collider_height + body.skin_width - result.distance);
 
                 continue;
             }
         }
 
         if let Some(result) = cast_up.result.as_ref() {
-            if result.distance > status.current_collider_height + SKIN_WIDTH + GROUND_WIDTH {
+            if result.distance > status.current_collider_height + body.skin_width + GROUND_WIDTH {
                 continue;
             }
 
             transform.translation -= -config.gravity.normalize()
-                * (status.current_collider_height + SKIN_WIDTH - result.distance);
+                * (status.current_collider_height + body.skin_width - result.distance);
         };
     }
 }
@@ -254,6 +268,7 @@ fn gravity(
 }
 
 fn moving(
+    time: Res<Time>,
     input: Res<Input>,
     mut entity_q: Query<(
         &mut Velocity,
@@ -292,7 +307,7 @@ fn moving(
         horizontal_velocity = move_toward(
             horizontal_velocity,
             direction * speed,
-            parameters.standing_acceleration,
+            parameters.standing_acceleration * time.delta_secs(),
         );
 
         velocity.linvel = horizontal_velocity + vertical_velocity;
@@ -300,6 +315,7 @@ fn moving(
 }
 
 fn falling(
+    time: Res<Time>,
     input: Res<Input>,
     mut entity_q: Query<(&mut Velocity, &Transform, &Parameters, &Status), With<Control>>,
     config_q: Query<&RapierConfiguration, Without<Status>>,
@@ -328,7 +344,7 @@ fn falling(
         horizontal_velocity = move_toward(
             horizontal_velocity,
             direction * parameters.falling_speed,
-            acceleration,
+            acceleration * time.delta_secs(),
         );
 
         velocity.linvel = horizontal_velocity + vertical_velocity;
@@ -340,17 +356,15 @@ fn jumping(
     mut entity_q: Query<(&mut Velocity, &Parameters, &Status), With<Control>>,
 ) {
     for (mut velocity, parameters, status) in entity_q.iter_mut() {
-        if status.surface.is_none() {
+        let Some(ground_surface) = status.surface else {
             continue;
-        }
+        };
 
         let mut jump_high = parameters.standing_jump_height;
 
         if input.crouching || !status.can_standup {
             jump_high = parameters.crouching_jump_height;
         }
-
-        let ground_surface = status.surface.unwrap();
 
         velocity.linvel = velocity.linvel - velocity.linvel.project_onto(ground_surface)
             + ground_surface * jump_high;

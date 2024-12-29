@@ -14,10 +14,12 @@ use entities::ghost::{GhostBundle, GhostPlugin};
 use linker::LinkerPlugin;
 use model::{Model, ModelPlugin};
 use shape_caster::ShapeCasterPlugin;
+use throttle::ThrottlePlugin;
 mod character_body;
 mod lib;
 mod linker;
 mod shape_caster;
+mod throttle;
 
 fn main() {
     App::new()
@@ -35,6 +37,7 @@ fn main() {
             CharacterBodyPlugin,
             ShapeCasterPlugin,
             LinkerPlugin,
+            ThrottlePlugin,
         ))
         .insert_resource(AmbientLight {
             color: Color::WHITE,
