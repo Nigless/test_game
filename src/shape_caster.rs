@@ -45,7 +45,7 @@ pub struct ShapeCasterPlugin;
 impl Plugin for ShapeCasterPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<ShapeCaster>()
-            .add_systems(PreUpdate, update.in_set(ShapeCasterSystems));
+            .add_systems(FixedPreUpdate, update.in_set(ShapeCasterSystems));
     }
 }
 

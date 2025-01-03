@@ -1,16 +1,13 @@
 use std::f32::consts;
 
 use crate::camera_controller::CameraController;
-use crate::character_body::{CharacterBody, CharacterBodySystems};
-use crate::control::{Control, Input};
-use crate::lib::move_toward;
+use crate::control::{Control, ControlSystems, Input};
+use crate::library::move_toward;
 use crate::linker::Linker;
 use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
 
-use bevy_rapier3d::dynamics::{GravityScale, Velocity};
+use bevy_rapier3d::dynamics::Velocity;
 
-use bevy_rapier3d::parry::math::{Point, Vector};
-use bevy_rapier3d::parry::shape::SharedShape;
 use bevy_rapier3d::plugin::RapierConfiguration;
 use bevy_rapier3d::prelude::Collider;
 
@@ -24,16 +21,17 @@ pub use entities::GhostBundle;
 pub const MAX_SLOPE_ANGLE: f32 = consts::PI / 3.8;
 pub const COLLIDER_TRANSITION_SPEED: f32 = 20.0;
 pub const COLLIDER_RADIUS: f32 = 0.3;
-pub const GROUND_WIDTH: f32 = 0.01;
-pub const SKIN_WIDTH: f32 = 0.01;
+pub const GROUND_WIDTH: f32 = 0.03;
+pub const SKIN_WIDTH: f32 = 0.05;
 pub const COLLIDER_HALF_HEIGHT: f32 = 1.0 - COLLIDER_RADIUS;
 pub const COLLIDER_CROUCHING_HALF_HEIGHT: f32 = COLLIDER_HALF_HEIGHT * 0.4;
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
 pub enum GhostSystems {
     Resolve,
-    Prepare,
     Update,
+    Prepare,
+    FixedUpdate,
 }
 
 pub struct GhostPlugin;
@@ -42,28 +40,29 @@ impl Plugin for GhostPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Parameters>()
             .register_type::<Status>()
-            .configure_sets(
-                PreUpdate,
-                (GhostSystems::Prepare, GhostSystems::Update)
-                    .chain()
-                    .after(ShapeCasterSystems)
-                    .before(CharacterBodySystems),
-            )
             .add_systems(First, resolve.in_set(GhostSystems::Resolve))
             .add_systems(
                 PreUpdate,
-                (ground_check, looking).in_set(GhostSystems::Prepare),
+                looking.in_set(GhostSystems::Update).after(ControlSystems),
+            )
+            .configure_sets(
+                FixedPreUpdate,
+                (GhostSystems::Prepare, GhostSystems::FixedUpdate)
+                    .chain()
+                    .after(ShapeCasterSystems),
             )
             .add_systems(
-                PreUpdate,
+                FixedPreUpdate,
                 (
-                    collider,
-                    gravity,
-                    moving,
-                    falling.run_if(|input: Res<Input>| input.moving.length() > 0.0),
-                    jumping.run_if(|input: Res<Input>| input.jumping),
-                )
-                    .in_set(GhostSystems::Update),
+                    ground_check.in_set(GhostSystems::Prepare),
+                    (
+                        collider,
+                        moving,
+                        falling.run_if(|input: Res<Input>| input.moving.length() > 0.0),
+                        jumping,
+                    )
+                        .in_set(GhostSystems::FixedUpdate),
+                ),
             );
     }
 }
@@ -98,13 +97,13 @@ fn resolve(mut commands: Commands, mut entity_q: Query<Entity, With<Unresolved>>
 }
 
 fn ground_check(
-    mut entity_q: Query<(&Linker, &mut Status, &CharacterBody)>,
+    mut entity_q: Query<(&Linker, &mut Status)>,
     caster_q: Query<&ShapeCaster, Without<Status>>,
     config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
     let config = config_q.get_single().unwrap();
 
-    for (linker, mut status, body) in entity_q.iter_mut() {
+    for (linker, mut status) in entity_q.iter_mut() {
         status.can_standup = true;
 
         status.surface = None;
@@ -122,9 +121,7 @@ fn ground_check(
         let cast_up = caster_q.get(*linker.get("cast_up").unwrap()).unwrap();
 
         if let Some(cast_up_result) = &cast_up.result {
-            if cast_up_result.distance + cast_down_result.distance
-                < (COLLIDER_HALF_HEIGHT + body.skin_width) * 2.0
-            {
+            if cast_up_result.distance + cast_down_result.distance < COLLIDER_HALF_HEIGHT * 2.0 {
                 status.can_standup = false;
             }
         }
@@ -137,9 +134,7 @@ fn ground_check(
             continue;
         }
 
-        if cast_down_result.distance
-            > status.current_collider_height + body.skin_width + GROUND_WIDTH
-        {
+        if cast_down_result.distance > status.current_collider_height + GROUND_WIDTH + SKIN_WIDTH {
             continue;
         }
 
@@ -148,43 +143,36 @@ fn ground_check(
 }
 
 fn looking(
-    input: Res<Input>,
+    mut input: ResMut<Input>,
     mut entity_q: Query<(&mut Transform, &Linker), (With<Control>, With<Parameters>)>,
     mut head_q: Query<&mut Transform, Without<Parameters>>,
 ) {
+    let looking = input.looking();
+
     for (mut transform, linker) in entity_q.iter_mut() {
         let mut head_transform = head_q.get_mut(*linker.get("head").unwrap()).unwrap();
 
-        let rotation = head_transform.rotation * Quat::from_rotation_x(input.looking_around.y);
+        let rotation = head_transform.rotation * Quat::from_rotation_x(looking.y);
 
         if (rotation * Vec3::Y).y >= 0.0 {
             head_transform.rotation = rotation;
         }
 
-        transform.rotation *= Quat::from_rotation_y(input.looking_around.x);
+        transform.rotation *= Quat::from_rotation_y(looking.x);
     }
 }
 
 fn collider(
     input: Res<Input>,
     time: Res<Time>,
-    mut entity_q: Query<
-        (
-            &mut Collider,
-            &mut Status,
-            &mut Transform,
-            &Linker,
-            &CharacterBody,
-        ),
-        With<Control>,
-    >,
+    mut entity_q: Query<(&mut Collider, &mut Status, &mut Transform, &Linker), With<Control>>,
     caster_q: Query<&ShapeCaster, Without<Status>>,
     mut head_q: Query<&mut Transform, Without<Status>>,
     config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
     let config = config_q.get_single().unwrap();
 
-    for (mut collider, mut status, mut transform, linker, body) in entity_q.iter_mut() {
+    for (mut collider, mut status, mut transform, linker) in entity_q.iter_mut() {
         let target_height = if input.crouching {
             COLLIDER_CROUCHING_HALF_HEIGHT
         } else if status.can_standup {
@@ -223,47 +211,29 @@ fn collider(
 
         if let Some(result) = cast_down.result.as_ref() {
             if height_diff < 0.0 {
-                if result.distance < original_height + body.skin_width + GROUND_WIDTH {
+                if result.distance < original_height + GROUND_WIDTH + SKIN_WIDTH {
                     transform.translation += -config.gravity.normalize() * height_diff;
                 }
 
                 continue;
             }
 
-            if result.distance < status.current_collider_height + body.skin_width + GROUND_WIDTH {
+            if result.distance < status.current_collider_height + GROUND_WIDTH + SKIN_WIDTH {
                 transform.translation += -config.gravity.normalize()
-                    * (status.current_collider_height + body.skin_width - result.distance);
+                    * (status.current_collider_height - result.distance);
 
                 continue;
             }
         }
 
         if let Some(result) = cast_up.result.as_ref() {
-            if result.distance > status.current_collider_height + body.skin_width + GROUND_WIDTH {
+            if result.distance > status.current_collider_height + GROUND_WIDTH + SKIN_WIDTH {
                 continue;
             }
 
-            transform.translation -= -config.gravity.normalize()
-                * (status.current_collider_height + body.skin_width - result.distance);
+            transform.translation -=
+                -config.gravity.normalize() * (status.current_collider_height - result.distance);
         };
-    }
-}
-
-fn gravity(
-    mut entity_q: Query<(&mut Velocity, Option<&GravityScale>)>,
-    time: Res<Time>,
-    config_q: Query<&RapierConfiguration, Without<Velocity>>,
-) {
-    let config = config_q.get_single().unwrap();
-
-    for (mut velocity, gravity) in entity_q.iter_mut() {
-        let mut scale = 1.0;
-
-        if let Some(gravity) = gravity {
-            scale = gravity.0
-        }
-
-        velocity.linvel += config.gravity * scale * time.delta_secs();
     }
 }
 
@@ -282,6 +252,7 @@ fn moving(
         let Some(ground_surface) = status.surface else {
             continue;
         };
+
         let mut speed = parameters.walking_speed;
 
         let mut direction = Vec3::ZERO;
@@ -352,9 +323,13 @@ fn falling(
 }
 
 fn jumping(
-    input: Res<Input>,
+    mut input: ResMut<Input>,
     mut entity_q: Query<(&mut Velocity, &Parameters, &Status), With<Control>>,
 ) {
+    if !input.jumping() {
+        return;
+    }
+
     for (mut velocity, parameters, status) in entity_q.iter_mut() {
         let Some(ground_surface) = status.surface else {
             continue;

@@ -54,12 +54,15 @@ fn resolve(
 
         commands.entity(children[0]).despawn();
 
-        commands.entity(entity).insert(
-            Collider::from_bevy_mesh(
-                meshes_res.get(mesh).unwrap(),
-                &ComputedColliderShape::default(),
+        commands
+            .entity(entity)
+            .insert(
+                Collider::from_bevy_mesh(
+                    meshes_res.get(mesh).unwrap(),
+                    &ComputedColliderShape::default(),
+                )
+                .unwrap(),
             )
-            .unwrap(),
-        );
+            .remove::<Children>();
     }
 }

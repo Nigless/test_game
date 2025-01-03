@@ -1,12 +1,6 @@
 use std::{thread::sleep, time::Duration};
 
-use bevy::{
-    app::Plugin,
-    ecs::{component::Component, system::Resource},
-    input::{keyboard::KeyCode, mouse::MouseMotion},
-    math::Vec2,
-    prelude::*,
-};
+use bevy::{app::Plugin, ecs::system::Resource, prelude::*};
 
 #[derive(Resource, Reflect, PartialEq)]
 #[reflect(Resource)]
