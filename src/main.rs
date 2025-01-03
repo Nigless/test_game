@@ -12,10 +12,12 @@ use control::{Control, ControlPlugin, Input};
 use entities::ghost::{GhostBundle, GhostPlugin};
 use linker::LinkerPlugin;
 use model::{Model, ModelPlugin};
+use ray_caster::RayCasterPlugin;
 use shape_caster::ShapeCasterPlugin;
 use throttle::ThrottlePlugin;
 mod library;
 mod linker;
+mod ray_caster;
 mod shape_caster;
 mod throttle;
 
@@ -35,13 +37,14 @@ fn main() {
             ShapeCasterPlugin,
             LinkerPlugin,
             ThrottlePlugin,
+            RayCasterPlugin,
         ))
         .insert_resource(AmbientLight {
             color: Color::WHITE,
             brightness: 100.0,
         })
         .insert_resource(ClearColor(Color::srgb(0.8, 0.9, 1.0)))
-        .add_systems(PreStartup, startup)
+        .add_systems(Startup, startup)
         .add_systems(PreUpdate, screen_mode_update)
         .run();
 }
@@ -91,11 +94,12 @@ fn startup(
         ),
     ));
 
-    commands
-        .spawn(GhostBundle::new())
-        .insert(Transform::from_xyz(0.0, 3.0, 0.0))
-        .insert(Spectate)
-        .insert(Control);
+    commands.spawn((
+        GhostBundle::new(),
+        Transform::from_xyz(0.0, 3.0, 0.0),
+        Spectate,
+        Control,
+    ));
 
     commands.spawn((
         GhostBundle::new(),

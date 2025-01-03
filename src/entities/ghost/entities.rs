@@ -9,11 +9,11 @@ use bevy_rapier3d::prelude::{
     Collider, ColliderMassProperties, Friction, LockedAxes, RigidBody, Velocity,
 };
 
-use crate::shape_caster::ShapeCaster;
+use crate::{ray_caster::RayCaster, shape_caster::ShapeCaster};
 
 use super::{
     components::*, COLLIDER_CROUCHING_HALF_HEIGHT, COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS,
-    SKIN_WIDTH,
+    HAND_DISTANCE, SKIN_WIDTH,
 };
 
 use bevy::prelude::*;
@@ -69,50 +69,59 @@ impl GhostCamera {
 }
 
 #[derive(Bundle)]
-pub struct GhostCastUp {
+pub struct RayCast {
+    name: Name,
+    caster: RayCaster,
+}
+
+impl RayCast {
+    pub fn new(exclude: Entity) -> Self {
+        Self {
+            name: Name::new("ray_cast"),
+            caster: RayCaster::new(Vec3::NEG_Z * HAND_DISTANCE).exclude(exclude),
+        }
+    }
+}
+
+#[derive(Bundle)]
+pub struct ShapeCast {
     name: Name,
     caster: ShapeCaster,
 }
 
-impl GhostCastUp {
-    pub fn new() -> Self {
+impl ShapeCast {
+    pub fn up(exclude: Entity) -> Self {
         Self {
             name: Name::new("cast_up"),
             caster: ShapeCaster::new(
                 Collider::ball(COLLIDER_RADIUS - SKIN_WIDTH),
                 Vec3::Y * CAST_DISTANCE,
             )
-            .exclude_parent(),
+            .fixed_update()
+            .exclude(exclude),
         }
     }
-}
 
-#[derive(Bundle)]
-pub struct GhostCastDown {
-    name: Name,
-    caster: ShapeCaster,
-}
-
-impl GhostCastDown {
-    pub fn new() -> Self {
+    pub fn down(exclude: Entity) -> Self {
         Self {
             name: Name::new("cast_down"),
             caster: ShapeCaster::new(
                 Collider::ball(COLLIDER_RADIUS - SKIN_WIDTH),
                 Vec3::NEG_Y * CAST_DISTANCE,
             )
-            .exclude_parent(),
+            .fixed_update()
+            .exclude(exclude),
         }
     }
 }
 
 #[derive(Bundle)]
-pub struct GhostHead {
+pub struct Head {
     name: Name,
     transform: Transform,
 }
 
-impl GhostHead {
+impl Head {
     pub fn new(position: Vec3) -> Self {
         Self {
             name: Name::new("head"),

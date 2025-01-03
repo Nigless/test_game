@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_inspector_egui::egui::util::cache;
 use bevy_rapier3d::{
     plugin::RapierContext,
     prelude::{Collider, QueryFilter, ShapeCastOptions},
@@ -21,7 +22,8 @@ pub struct ShapeCaster {
     pub collider: Collider,
     pub direction: Vec3,
     pub result: Option<CastResult>,
-    pub exclude_parent: bool,
+    pub fixed_update: bool,
+    exclude: Option<Entity>,
 }
 
 impl ShapeCaster {
@@ -30,12 +32,18 @@ impl ShapeCaster {
             collider,
             direction,
             result: None,
-            exclude_parent: false,
+            fixed_update: false,
+            exclude: None,
         }
     }
 
-    pub fn exclude_parent(mut self) -> Self {
-        self.exclude_parent = true;
+    pub fn fixed_update(mut self) -> Self {
+        self.fixed_update = true;
+        self
+    }
+
+    pub fn exclude(mut self, entity: Entity) -> Self {
+        self.exclude = Some(entity);
         self
     }
 }
@@ -45,50 +53,66 @@ pub struct ShapeCasterPlugin;
 impl Plugin for ShapeCasterPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<ShapeCaster>()
-            .add_systems(FixedPreUpdate, update.in_set(ShapeCasterSystems));
+            .add_systems(FixedPreUpdate, fixed_update.in_set(ShapeCasterSystems))
+            .add_systems(PreUpdate, update.in_set(ShapeCasterSystems));
+    }
+}
+
+fn fixed_update(
+    rapier: Single<&RapierContext>,
+    mut entity_q: Query<(&mut ShapeCaster, &GlobalTransform), Without<RapierContext>>,
+) {
+    for entity in entity_q.iter_mut() {
+        if !entity.0.fixed_update {
+            continue;
+        }
+
+        update_entity(&rapier, entity);
     }
 }
 
 fn update(
-    rapier_q: Query<&RapierContext>,
-    mut entity_q: Query<
-        (&mut ShapeCaster, &GlobalTransform, Option<&Parent>),
-        Without<RapierContext>,
-    >,
+    rapier: Single<&RapierContext>,
+    mut entity_q: Query<(&mut ShapeCaster, &GlobalTransform), Without<RapierContext>>,
 ) {
-    let rapier = rapier_q.get_single().unwrap();
-
-    for (mut shape_caster, transform, parent) in entity_q.iter_mut() {
-        let mut filter = QueryFilter::default();
-
-        if let Some(parent) = parent {
-            if shape_caster.exclude_parent {
-                filter = filter.exclude_collider(parent.get());
-            }
-        }
-
-        if let Some((time_of_impact, normal)) = rapier
-            .cast_shape(
-                transform.translation(),
-                transform.rotation(),
-                shape_caster.direction,
-                &shape_caster.collider,
-                ShapeCastOptions::default(),
-                filter,
-            )
-            .map_or(None, |(_, hit)| {
-                hit.details
-                    .map(|details| (hit.time_of_impact, details.normal1))
-            })
-        {
-            shape_caster.result = Some(CastResult {
-                distance: shape_caster.direction.length() * time_of_impact,
-                normal,
-            });
-
+    for entity in entity_q.iter_mut() {
+        if entity.0.fixed_update {
             continue;
         }
 
-        shape_caster.result = None
+        update_entity(&rapier, entity);
     }
+}
+
+fn update_entity(
+    rapier: &Single<&RapierContext>,
+    (mut shape_caster, transform): (Mut<'_, ShapeCaster>, &GlobalTransform),
+) {
+    let mut filter = QueryFilter::default();
+
+    filter.exclude_collider = shape_caster.exclude;
+
+    if let Some((time_of_impact, normal)) = rapier
+        .cast_shape(
+            transform.translation(),
+            transform.rotation(),
+            shape_caster.direction,
+            &shape_caster.collider,
+            ShapeCastOptions::default(),
+            filter,
+        )
+        .map_or(None, |(_, hit)| {
+            hit.details
+                .map(|details| (hit.time_of_impact, details.normal1))
+        })
+    {
+        shape_caster.result = Some(CastResult {
+            distance: shape_caster.direction.length() * time_of_impact,
+            normal,
+        });
+
+        return;
+    }
+
+    shape_caster.result = None
 }

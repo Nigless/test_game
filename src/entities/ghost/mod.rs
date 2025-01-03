@@ -4,6 +4,7 @@ use crate::camera_controller::CameraController;
 use crate::control::{Control, ControlSystems, Input};
 use crate::library::move_toward;
 use crate::linker::Linker;
+use crate::ray_caster::RayCasterSystems;
 use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
 
 use bevy_rapier3d::dynamics::Velocity;
@@ -13,12 +14,13 @@ use bevy_rapier3d::prelude::Collider;
 
 use bevy::prelude::*;
 use components::{Parameters, Status, Unresolved};
-use entities::{GhostCamera, GhostCastDown, GhostCastUp, GhostHead};
+use entities::{GhostCamera, Head, RayCast, ShapeCast};
 mod components;
 mod entities;
 pub use entities::GhostBundle;
 
 pub const MAX_SLOPE_ANGLE: f32 = consts::PI / 3.8;
+pub const HAND_DISTANCE: f32 = 2.0;
 pub const COLLIDER_TRANSITION_SPEED: f32 = 20.0;
 pub const COLLIDER_RADIUS: f32 = 0.3;
 pub const GROUND_WIDTH: f32 = 0.03;
@@ -43,7 +45,10 @@ impl Plugin for GhostPlugin {
             .add_systems(First, resolve.in_set(GhostSystems::Resolve))
             .add_systems(
                 PreUpdate,
-                looking.in_set(GhostSystems::Update).after(ControlSystems),
+                looking
+                    .in_set(GhostSystems::Update)
+                    .after(ControlSystems)
+                    .before(RayCasterSystems),
             )
             .configure_sets(
                 FixedPreUpdate,
@@ -71,14 +76,16 @@ fn resolve(mut commands: Commands, mut entity_q: Query<Entity, With<Unresolved>>
     for entity in entity_q.iter_mut() {
         let camera = commands.spawn(GhostCamera::new()).id();
 
+        let ray_cast = commands.spawn(RayCast::new(entity)).id();
+
         let head = commands
-            .spawn(GhostHead::new(Vec3::new(0.0, COLLIDER_HALF_HEIGHT, 0.0)))
+            .spawn(Head::new(Vec3::new(0.0, COLLIDER_HALF_HEIGHT, 0.0)))
             .add_child(camera)
+            .add_child(ray_cast)
             .id();
 
-        let cast_up = commands.spawn(GhostCastUp::new()).id();
-
-        let cast_down = commands.spawn(GhostCastDown::new()).id();
+        let cast_up = commands.spawn(ShapeCast::up(entity)).id();
+        let cast_down = commands.spawn(ShapeCast::down(entity)).id();
 
         commands
             .entity(entity)
@@ -87,6 +94,7 @@ fn resolve(mut commands: Commands, mut entity_q: Query<Entity, With<Unresolved>>
                 CameraController::new(camera),
                 Linker::new()
                     .with_link("head", head)
+                    .with_link("ray_cast", ray_cast)
                     .with_link("cast_up", cast_up)
                     .with_link("cast_down", cast_down),
             ))
