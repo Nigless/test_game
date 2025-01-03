@@ -5,9 +5,11 @@ use bevy::{
     prelude::{Bundle, Projection},
     utils::default,
 };
-use bevy_rapier3d::prelude::Collider;
+use bevy_rapier3d::prelude::{
+    Collider, ColliderMassProperties, Friction, LockedAxes, RigidBody, Velocity,
+};
 
-use crate::{character_body::CharacterBody, shape_caster::ShapeCaster};
+use crate::shape_caster::ShapeCaster;
 
 use super::{
     components::*, COLLIDER_CROUCHING_HALF_HEIGHT, COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS,
@@ -16,12 +18,19 @@ use super::{
 
 use bevy::prelude::*;
 
+const CAST_DISTANCE: f32 =
+    COLLIDER_HALF_HEIGHT - COLLIDER_CROUCHING_HALF_HEIGHT + COLLIDER_HALF_HEIGHT + SKIN_WIDTH;
+
 #[derive(Bundle)]
 pub struct GhostBundle {
     name: Name,
     parameters: Parameters,
     collider: Collider,
-    character_body: CharacterBody,
+    body: RigidBody,
+    velocity: Velocity,
+    lock: LockedAxes,
+    friction: Friction,
+    mass: ColliderMassProperties,
 }
 
 impl GhostBundle {
@@ -29,8 +38,12 @@ impl GhostBundle {
         Self {
             name: Name::new("ghost"),
             collider: Collider::capsule_y(COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS),
-            character_body: CharacterBody::default().skin_width(SKIN_WIDTH),
+            body: RigidBody::Dynamic,
             parameters: default(),
+            velocity: Velocity::default(),
+            lock: LockedAxes::ROTATION_LOCKED,
+            friction: Friction::new(0.0),
+            mass: ColliderMassProperties::Mass(65.0),
         }
     }
 }
@@ -66,10 +79,8 @@ impl GhostCastUp {
         Self {
             name: Name::new("cast_up"),
             caster: ShapeCaster::new(
-                Collider::ball(COLLIDER_RADIUS),
-                Vec3::Y
-                    * (COLLIDER_HALF_HEIGHT - COLLIDER_CROUCHING_HALF_HEIGHT
-                        + COLLIDER_HALF_HEIGHT),
+                Collider::ball(COLLIDER_RADIUS - SKIN_WIDTH),
+                Vec3::Y * CAST_DISTANCE,
             )
             .exclude_parent(),
         }
@@ -87,10 +98,8 @@ impl GhostCastDown {
         Self {
             name: Name::new("cast_down"),
             caster: ShapeCaster::new(
-                Collider::ball(COLLIDER_RADIUS),
-                Vec3::NEG_Y
-                    * (COLLIDER_HALF_HEIGHT - COLLIDER_CROUCHING_HALF_HEIGHT
-                        + COLLIDER_HALF_HEIGHT),
+                Collider::ball(COLLIDER_RADIUS - SKIN_WIDTH),
+                Vec3::NEG_Y * CAST_DISTANCE,
             )
             .exclude_parent(),
         }

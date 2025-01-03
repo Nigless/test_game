@@ -8,15 +8,13 @@ mod model;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
 use camera_controller::{CameraControllerPlugin, Spectate};
-use character_body::CharacterBodyPlugin;
 use control::{Control, ControlPlugin, Input};
 use entities::ghost::{GhostBundle, GhostPlugin};
 use linker::LinkerPlugin;
 use model::{Model, ModelPlugin};
 use shape_caster::ShapeCasterPlugin;
 use throttle::ThrottlePlugin;
-mod character_body;
-mod lib;
+mod library;
 mod linker;
 mod shape_caster;
 mod throttle;
@@ -34,7 +32,6 @@ fn main() {
             GhostPlugin,
             CameraControllerPlugin,
             ControlPlugin,
-            CharacterBodyPlugin,
             ShapeCasterPlugin,
             LinkerPlugin,
             ThrottlePlugin,
@@ -49,14 +46,14 @@ fn main() {
         .run();
 }
 
-fn screen_mode_update(input: Res<Input>, mut window: Single<&mut Window>) {
+fn screen_mode_update(mut input: ResMut<Input>, mut window: Single<&mut Window>) {
     if let WindowMode::BorderlessFullscreen(_) = window.mode {
         let x = window.resolution.width() / 2.0;
         let y = window.resolution.height() / 2.0;
         window.set_cursor_position(Some(Vec2::new(x, y)));
     }
 
-    if !input.full_screen_switching {
+    if !input.full_screen_switching() {
         return;
     }
 
@@ -76,7 +73,11 @@ fn startup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    commands.spawn((Model::new("test_scene.glb"), RigidBody::Fixed));
+    commands.spawn((
+        Name::new("test_scene"),
+        Model::new("test_scene.glb"),
+        RigidBody::Fixed,
+    ));
 
     commands.spawn((
         DirectionalLight {
@@ -96,17 +97,74 @@ fn startup(
         .insert(Spectate)
         .insert(Control);
 
-    commands.spawn(GhostBundle::new()).insert(
+    commands.spawn((
+        GhostBundle::new(),
         Transform::from_xyz(4.0, 2.2, 5.0).with_rotation(Quat::from_rotation_y(consts::PI)),
-    );
+    ));
 
     commands.spawn((
-        Name::new("Package"),
+        Name::new("package_1kg"),
         Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
+        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
         Collider::cuboid(0.5, 0.5, 0.5),
         RigidBody::Dynamic,
         Transform::from_xyz(0.0, 10.0, 10.0),
         Velocity::default(),
+        ColliderMassProperties::Mass(1.0),
+    ));
+
+    commands.spawn((
+        Name::new("package_10kg"),
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
+        Collider::cuboid(0.5, 0.5, 0.5),
+        RigidBody::Dynamic,
+        Transform::from_xyz(0.0, 10.0, 12.0),
+        Velocity::default(),
+        ColliderMassProperties::Mass(10.0),
+    ));
+
+    commands.spawn((
+        Name::new("package_100kg"),
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
+        Collider::cuboid(0.5, 0.5, 0.5),
+        RigidBody::Dynamic,
+        Transform::from_xyz(2.0, 10.0, 10.0),
+        Velocity::default(),
+        ColliderMassProperties::Mass(100.0),
+    ));
+
+    commands.spawn((
+        Name::new("package_1,000kg"),
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
+        Collider::cuboid(0.5, 0.5, 0.5),
+        RigidBody::Dynamic,
+        Transform::from_xyz(2.0, 10.0, 12.0),
+        Velocity::default(),
+        ColliderMassProperties::Mass(1_000.0),
+    ));
+
+    commands.spawn((
+        Name::new("package_10,000kg"),
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
+        Collider::cuboid(0.5, 0.5, 0.5),
+        RigidBody::Dynamic,
+        Transform::from_xyz(2.0, 10.0, 14.0),
+        Velocity::default(),
+        ColliderMassProperties::Mass(10_000.0),
+    ));
+
+    commands.spawn((
+        Name::new("package_100,000kg"),
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
+        Collider::cuboid(0.5, 0.5, 0.5),
+        RigidBody::Dynamic,
+        Transform::from_xyz(2.0, 10.0, 16.0),
+        Velocity::default(),
+        ColliderMassProperties::Mass(100_000.0),
     ));
 }
