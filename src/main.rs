@@ -1,4 +1,4 @@
-use std::f32::consts;
+use std::{env, f32::consts};
 
 use bevy::{prelude::*, window::WindowMode};
 mod camera_controller;
@@ -10,25 +10,38 @@ use bevy_rapier3d::prelude::*;
 use camera_controller::{CameraControllerPlugin, Spectate};
 use control::{Control, ControlPlugin, Input};
 use entities::ghost::{GhostBundle, GhostPlugin};
+use levels::test_level::TestLevel;
 use linker::LinkerPlugin;
 use model::{Model, ModelPlugin};
 use ray_caster::RayCasterPlugin;
 use shape_caster::ShapeCasterPlugin;
 use throttle::ThrottlePlugin;
+mod levels;
 mod library;
 mod linker;
 mod ray_caster;
 mod shape_caster;
 mod throttle;
+mod with_child;
+mod with_material;
+mod with_mesh;
+
+#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
+pub enum AppSystems {
+    Startup,
+    Update,
+}
+
+#[derive(Resource, Reflect, Default)]
+#[reflect(Resource)]
+pub struct Debugging {
+    enable: bool,
+}
 
 fn main() {
-    App::new()
-        .add_plugins((
-            DefaultPlugins,
-            WorldInspectorPlugin::default(),
-            RapierPhysicsPlugin::<NoUserData>::default(),
-            RapierDebugRenderPlugin::default(),
-        ))
+    let mut app = App::new();
+    let mut app = app
+        .add_plugins((DefaultPlugins, RapierPhysicsPlugin::<NoUserData>::default()))
         .add_plugins((
             ModelPlugin,
             GhostPlugin,
@@ -43,10 +56,24 @@ fn main() {
             color: Color::WHITE,
             brightness: 100.0,
         })
+        .insert_resource(Debugging::default())
         .insert_resource(ClearColor(Color::srgb(0.8, 0.9, 1.0)))
-        .add_systems(Startup, startup)
-        .add_systems(PreUpdate, screen_mode_update)
-        .run();
+        .add_systems(Startup, startup.in_set(AppSystems::Startup))
+        .add_systems(PreUpdate, screen_mode_update.in_set(AppSystems::Update));
+
+    let debug = env::var("DEBUG").unwrap_or("".to_owned());
+
+    if debug == "true" {
+        app = app
+            .add_plugins((
+                RapierDebugRenderPlugin::default(),
+                WorldInspectorPlugin::default(),
+            ))
+            .register_type::<Debugging>()
+            .insert_resource(Debugging { enable: true });
+    }
+
+    app.run();
 }
 
 fn screen_mode_update(mut input: ResMut<Input>, mut window: Single<&mut Window>) {
@@ -71,104 +98,6 @@ fn screen_mode_update(mut input: ResMut<Input>, mut window: Single<&mut Window>)
     window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Current)
 }
 
-fn startup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    commands.spawn((
-        Name::new("test_scene"),
-        Model::new("test_scene.glb"),
-        RigidBody::Fixed,
-    ));
-
-    commands.spawn((
-        DirectionalLight {
-            illuminance: 3000.0,
-            shadows_enabled: true,
-            color: Color::WHITE,
-            ..default()
-        },
-        Transform::from_rotation(
-            Quat::from_rotation_y(consts::PI * -0.1) * Quat::from_rotation_x(consts::PI * -0.6),
-        ),
-    ));
-
-    commands.spawn((
-        GhostBundle::new(),
-        Transform::from_xyz(0.0, 3.0, 0.0),
-        Spectate,
-        Control,
-    ));
-
-    commands.spawn((
-        GhostBundle::new(),
-        Transform::from_xyz(4.0, 2.2, 5.0).with_rotation(Quat::from_rotation_y(consts::PI)),
-    ));
-
-    commands.spawn((
-        Name::new("package_1kg"),
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
-        Collider::cuboid(0.5, 0.5, 0.5),
-        RigidBody::Dynamic,
-        Transform::from_xyz(0.0, 10.0, 10.0),
-        Velocity::default(),
-        ColliderMassProperties::Mass(1.0),
-    ));
-
-    commands.spawn((
-        Name::new("package_10kg"),
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
-        Collider::cuboid(0.5, 0.5, 0.5),
-        RigidBody::Dynamic,
-        Transform::from_xyz(0.0, 10.0, 12.0),
-        Velocity::default(),
-        ColliderMassProperties::Mass(10.0),
-    ));
-
-    commands.spawn((
-        Name::new("package_100kg"),
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
-        Collider::cuboid(0.5, 0.5, 0.5),
-        RigidBody::Dynamic,
-        Transform::from_xyz(2.0, 10.0, 10.0),
-        Velocity::default(),
-        ColliderMassProperties::Mass(100.0),
-    ));
-
-    commands.spawn((
-        Name::new("package_1,000kg"),
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
-        Collider::cuboid(0.5, 0.5, 0.5),
-        RigidBody::Dynamic,
-        Transform::from_xyz(2.0, 10.0, 12.0),
-        Velocity::default(),
-        ColliderMassProperties::Mass(1_000.0),
-    ));
-
-    commands.spawn((
-        Name::new("package_10,000kg"),
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
-        Collider::cuboid(0.5, 0.5, 0.5),
-        RigidBody::Dynamic,
-        Transform::from_xyz(2.0, 10.0, 14.0),
-        Velocity::default(),
-        ColliderMassProperties::Mass(10_000.0),
-    ));
-
-    commands.spawn((
-        Name::new("package_100,000kg"),
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(255, 255, 255))),
-        Collider::cuboid(0.5, 0.5, 0.5),
-        RigidBody::Dynamic,
-        Transform::from_xyz(2.0, 10.0, 16.0),
-        Velocity::default(),
-        ColliderMassProperties::Mass(100_000.0),
-    ));
+fn startup(mut commands: Commands) {
+    commands.spawn(TestLevel::default());
 }

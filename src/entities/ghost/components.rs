@@ -1,7 +1,7 @@
 use bevy::{prelude::Component, reflect::Reflect};
 
 use bevy::prelude::*;
-use bevy_rapier3d::prelude::GravityScale;
+use bevy_rapier3d::prelude::{GravityScale, Velocity};
 
 use super::COLLIDER_HALF_HEIGHT;
 
@@ -10,7 +10,7 @@ pub struct Unresolved;
 
 #[derive(Component, Reflect, PartialEq)]
 #[reflect(Component)]
-#[require(GravityScale, Status, Unresolved)]
+#[require(GravityScale, Status, Unresolved, Velocity)]
 pub struct Parameters {
     pub walking_speed: f32,
     pub falling_speed: f32,

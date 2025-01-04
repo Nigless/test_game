@@ -1,4 +1,4 @@
-use std::f32::consts;
+use std::f32::{consts, INFINITY};
 
 use crate::camera_controller::CameraController;
 use crate::control::{Control, ControlSystems, Input};
@@ -10,7 +10,7 @@ use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
 use bevy_rapier3d::dynamics::Velocity;
 
 use bevy_rapier3d::plugin::RapierConfiguration;
-use bevy_rapier3d::prelude::Collider;
+use bevy_rapier3d::prelude::{Collider, GravityScale};
 
 use bevy::prelude::*;
 use components::{Parameters, Status, Unresolved};
@@ -21,9 +21,9 @@ pub use entities::GhostBundle;
 
 pub const MAX_SLOPE_ANGLE: f32 = consts::PI / 3.8;
 pub const HAND_DISTANCE: f32 = 2.0;
-pub const COLLIDER_TRANSITION_SPEED: f32 = 20.0;
+pub const COLLIDER_TRANSITION_SPEED: f32 = 0.1;
 pub const COLLIDER_RADIUS: f32 = 0.3;
-pub const GROUND_WIDTH: f32 = 0.03;
+pub const MAX_SURFACE_GAP: f32 = 0.03 + SKIN_WIDTH;
 pub const SKIN_WIDTH: f32 = 0.05;
 pub const COLLIDER_HALF_HEIGHT: f32 = 1.0 - COLLIDER_RADIUS;
 pub const COLLIDER_CROUCHING_HALF_HEIGHT: f32 = COLLIDER_HALF_HEIGHT * 0.4;
@@ -45,7 +45,7 @@ impl Plugin for GhostPlugin {
             .add_systems(First, resolve.in_set(GhostSystems::Resolve))
             .add_systems(
                 PreUpdate,
-                looking
+                camera
                     .in_set(GhostSystems::Update)
                     .after(ControlSystems)
                     .before(RayCasterSystems),
@@ -72,14 +72,14 @@ impl Plugin for GhostPlugin {
     }
 }
 
-fn resolve(mut commands: Commands, mut entity_q: Query<Entity, With<Unresolved>>) {
-    for entity in entity_q.iter_mut() {
+fn resolve(mut commands: Commands, mut entity_q: Query<(Entity, &Transform), With<Unresolved>>) {
+    for (entity, transform) in entity_q.iter_mut() {
         let camera = commands.spawn(GhostCamera::new()).id();
 
         let ray_cast = commands.spawn(RayCast::new(entity)).id();
 
         let head = commands
-            .spawn(Head::new(Vec3::new(0.0, COLLIDER_HALF_HEIGHT, 0.0)))
+            .spawn(Head::new(Vec3::Y * COLLIDER_HALF_HEIGHT))
             .add_child(camera)
             .add_child(ray_cast)
             .id();
@@ -105,26 +105,33 @@ fn resolve(mut commands: Commands, mut entity_q: Query<Entity, With<Unresolved>>
 }
 
 fn ground_check(
-    mut entity_q: Query<(&Linker, &mut Status)>,
+    mut entity_q: Query<(
+        &Linker,
+        &mut Status,
+        &mut GravityScale,
+        &mut Transform,
+        &mut Velocity,
+    )>,
+    time: Res<Time>,
     caster_q: Query<&ShapeCaster, Without<Status>>,
     config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
     let config = config_q.get_single().unwrap();
 
-    for (linker, mut status) in entity_q.iter_mut() {
+    for (linker, mut status, mut gravity, mut transform, mut velocity) in entity_q.iter_mut() {
         status.can_standup = true;
 
         status.surface = None;
 
-        let cast_down = caster_q.get(*linker.get("cast_down").unwrap()).unwrap();
+        gravity.0 = 1.0;
 
-        if cast_down.result.is_none() {
-            continue;
-        }
+        let cast_down = caster_q.get(*linker.get("cast_down").unwrap()).unwrap();
 
         let Some(cast_down_result) = cast_down.result.as_ref() else {
             continue;
         };
+
+        let normal = cast_down_result.normal;
 
         let cast_up = caster_q.get(*linker.get("cast_up").unwrap()).unwrap();
 
@@ -134,23 +141,31 @@ fn ground_check(
             }
         }
 
-        if cast_down_result
-            .normal
-            .angle_between(-config.gravity.normalize())
-            > MAX_SLOPE_ANGLE
-        {
+        let gravity_direction = config.gravity.normalize();
+
+        if normal.angle_between(-gravity_direction) > MAX_SLOPE_ANGLE {
             continue;
         }
 
-        if cast_down_result.distance > status.current_collider_height + GROUND_WIDTH + SKIN_WIDTH {
+        let ground_gap = cast_down_result.distance - SKIN_WIDTH - status.current_collider_height;
+
+        if ground_gap > MAX_SURFACE_GAP {
             continue;
         }
 
-        status.surface = Some(cast_down_result.normal);
+        if ground_gap < SKIN_WIDTH {
+            gravity.0 = 0.0;
+
+            velocity.linvel = velocity.linvel.reject_from(normal);
+
+            transform.translation += normal * (SKIN_WIDTH - ground_gap) * (time.delta_secs() / 0.5)
+        }
+
+        status.surface = Some(normal);
     }
 }
 
-fn looking(
+fn camera(
     mut input: ResMut<Input>,
     mut entity_q: Query<(&mut Transform, &Linker), (With<Control>, With<Parameters>)>,
     mut head_q: Query<&mut Transform, Without<Parameters>>,
@@ -181,67 +196,90 @@ fn collider(
     let config = config_q.get_single().unwrap();
 
     for (mut collider, mut status, mut transform, linker) in entity_q.iter_mut() {
-        let target_height = if input.crouching {
-            COLLIDER_CROUCHING_HALF_HEIGHT
-        } else if status.can_standup {
-            COLLIDER_HALF_HEIGHT
-        } else {
-            continue;
-        };
-
-        if status.current_collider_height == target_height {
-            continue;
-        }
-
-        let mut head_transform = head_q.get_mut(*linker.get("head").unwrap()).unwrap();
-
-        let mut height_diff = status
-            .current_collider_height
-            .lerp(target_height, time.delta_secs() * COLLIDER_TRANSITION_SPEED)
-            - status.current_collider_height;
-
-        if height_diff.abs() < 0.0001
-            || height_diff.abs() > (target_height - status.current_collider_height).abs()
-        {
-            height_diff = target_height - status.current_collider_height;
-        }
-
-        let original_height = status.current_collider_height;
-
-        status.current_collider_height += height_diff;
-
-        head_transform.translation += Vec3::Y * height_diff;
-
-        *collider = Collider::capsule_y(status.current_collider_height, COLLIDER_RADIUS);
-
         let cast_down = caster_q.get(*linker.get("cast_down").unwrap()).unwrap();
         let cast_up = caster_q.get(*linker.get("cast_up").unwrap()).unwrap();
 
-        if let Some(result) = cast_down.result.as_ref() {
-            if height_diff < 0.0 {
-                if result.distance < original_height + GROUND_WIDTH + SKIN_WIDTH {
-                    transform.translation += -config.gravity.normalize() * height_diff;
-                }
+        let is_touching_ground = |height: f32| {
+            if let Some(result) = cast_down.result.as_ref() {
+                let surface_gap = result.distance - SKIN_WIDTH - height;
 
-                continue;
+                return surface_gap < MAX_SURFACE_GAP;
+            }
+            false
+        };
+
+        let celling_gap = |height: f32| {
+            if let Some(result) = cast_up.result.as_ref() {
+                let surface_gap = result.distance - SKIN_WIDTH - height;
+
+                return surface_gap < SKIN_WIDTH;
+            }
+            false
+        };
+
+        let get_height_diff = || {
+            let target_height = if input.crouching {
+                COLLIDER_CROUCHING_HALF_HEIGHT
+            } else if status.can_standup {
+                COLLIDER_HALF_HEIGHT
+            } else {
+                return 0.0;
+            };
+
+            if status.current_collider_height == target_height {
+                return 0.0;
             }
 
-            if result.distance < status.current_collider_height + GROUND_WIDTH + SKIN_WIDTH {
-                transform.translation += -config.gravity.normalize()
-                    * (status.current_collider_height - result.distance);
+            let delta = time.delta_secs() / COLLIDER_TRANSITION_SPEED;
 
-                continue;
+            if delta > 1.0 {
+                return target_height - status.current_collider_height;
             }
+
+            if (target_height - status.current_collider_height).abs() < 0.0001 {
+                return target_height - status.current_collider_height;
+            }
+
+            return status.current_collider_height.lerp(target_height, delta)
+                - status.current_collider_height;
+        };
+
+        let height_diff = get_height_diff();
+
+        let original_height = status.current_collider_height;
+
+        let gravity_direction = config.gravity.normalize();
+
+        if height_diff != 0.0 {
+            let mut head_transform = head_q.get_mut(*linker.get("head").unwrap()).unwrap();
+
+            status.current_collider_height += height_diff;
+
+            head_transform.translation += Vec3::Y * height_diff;
+
+            *collider = Collider::capsule_y(status.current_collider_height, COLLIDER_RADIUS);
         }
 
-        if let Some(result) = cast_up.result.as_ref() {
-            if result.distance > status.current_collider_height + GROUND_WIDTH + SKIN_WIDTH {
+        if status.current_collider_height < original_height {
+            if is_touching_ground(original_height) {
+                transform.translation -= gravity_direction * height_diff;
+            }
+            continue;
+        }
+
+        if status.current_collider_height > original_height {
+            if is_touching_ground(status.current_collider_height) {
+                transform.translation -= gravity_direction * height_diff;
+
                 continue;
             }
 
-            transform.translation -=
-                -config.gravity.normalize() * (status.current_collider_height - result.distance);
-        };
+            if celling_gap(status.current_collider_height) {
+                transform.translation += gravity_direction * height_diff;
+            }
+
+            continue;
+        }
     }
 }
 

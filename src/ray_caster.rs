@@ -4,6 +4,8 @@ use bevy_rapier3d::{
     prelude::{Collider, QueryFilter, ShapeCastOptions},
 };
 
+use crate::Debugging;
+
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
 pub struct RayCasterSystems;
 
@@ -55,6 +57,7 @@ impl Plugin for RayCasterPlugin {
 }
 
 fn fixed_update(
+    debugging: Res<Debugging>,
     mut gizmos: Gizmos,
     rapier: Single<&RapierContext>,
     mut entity_q: Query<(&mut RayCaster, &GlobalTransform), Without<RapierContext>>,
@@ -64,11 +67,12 @@ fn fixed_update(
             continue;
         }
 
-        update_entity(&mut gizmos, &rapier, entity);
+        update_entity(&debugging, &mut gizmos, &rapier, entity);
     }
 }
 
 fn update(
+    debugging: Res<Debugging>,
     mut gizmos: Gizmos,
     rapier: Single<&RapierContext>,
     mut entity_q: Query<(&mut RayCaster, &GlobalTransform), Without<RapierContext>>,
@@ -78,11 +82,12 @@ fn update(
             continue;
         }
 
-        update_entity(&mut gizmos, &rapier, entity);
+        update_entity(&debugging, &mut gizmos, &rapier, entity);
     }
 }
 
 fn update_entity(
+    debugging: &Res<Debugging>,
     gizmos: &mut Gizmos,
     rapier: &Single<&RapierContext>,
     (mut shape_caster, transform): (Mut<'_, RayCaster>, &GlobalTransform),
@@ -106,22 +111,33 @@ fn update_entity(
             normal,
         });
 
+        if !debugging.enable {
+            return;
+        }
+
         gizmos.ray(
             transform.translation(),
             transform.rotation() * shape_caster.direction * time_of_impact,
             Color::linear_rgb(1.0, 0.0, 0.0),
         );
 
-        gizmos.circle(
-            Isometry3d::new(
-                transform.translation()
-                    + transform.rotation() * shape_caster.direction * time_of_impact,
-                Quat::from_rotation_arc(Vec3::Z, normal),
-            ),
-            0.1,
-            Color::linear_rgb(1.0, 0.0, 0.0),
-        );
+        gizmos
+            .circle(
+                Isometry3d::new(
+                    transform.translation()
+                        + transform.rotation() * shape_caster.direction * time_of_impact
+                        + normal * 0.001,
+                    Quat::from_rotation_arc(Vec3::Z, normal),
+                ),
+                0.1,
+                Color::linear_rgb(1.0, 0.0, 0.0),
+            )
+            .resolution(16);
 
+        return;
+    }
+
+    if !debugging.enable {
         return;
     }
 

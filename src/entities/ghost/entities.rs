@@ -2,11 +2,13 @@ use std::f32::consts;
 
 use bevy::{
     core::Name,
+    ecs::component::{ComponentHooks, StorageType},
     prelude::{Bundle, Projection},
     utils::default,
 };
 use bevy_rapier3d::prelude::{
-    Collider, ColliderMassProperties, Friction, LockedAxes, RigidBody, Velocity,
+    CoefficientCombineRule, Collider, ColliderMassProperties, Friction, LockedAxes, RigidBody,
+    Velocity,
 };
 
 use crate::{ray_caster::RayCaster, shape_caster::ShapeCaster};
@@ -27,7 +29,6 @@ pub struct GhostBundle {
     parameters: Parameters,
     collider: Collider,
     body: RigidBody,
-    velocity: Velocity,
     lock: LockedAxes,
     friction: Friction,
     mass: ColliderMassProperties,
@@ -39,11 +40,13 @@ impl GhostBundle {
             name: Name::new("ghost"),
             collider: Collider::capsule_y(COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS),
             body: RigidBody::Dynamic,
-            parameters: default(),
-            velocity: Velocity::default(),
             lock: LockedAxes::ROTATION_LOCKED,
-            friction: Friction::new(0.0),
+            friction: Friction {
+                coefficient: 0.0,
+                combine_rule: CoefficientCombineRule::Multiply,
+            },
             mass: ColliderMassProperties::Mass(65.0),
+            parameters: default(),
         }
     }
 }
