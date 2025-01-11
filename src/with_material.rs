@@ -2,7 +2,6 @@ use bevy::{
     ecs::component::{ComponentHooks, StorageType},
     prelude::*,
 };
-use bevy_rapier3d::geometry::{Collider, ComputedColliderShape};
 
 pub struct WithMaterial {
     material: Option<StandardMaterial>,

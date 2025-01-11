@@ -1,7 +1,9 @@
-use bevy::prelude::*;
+use bevy::{
+    ecs::component::{ComponentHooks, StorageType},
+    prelude::*,
+};
 use bevy_rapier3d::geometry::{Collider, ComputedColliderShape};
 
-#[derive(Component)]
 pub struct Model {
     pub src: String,
 }
@@ -14,6 +16,28 @@ impl Model {
     }
 }
 
+impl Component for Model {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_add(|mut world, entity, _component_id| {
+            let src = world.get_mut::<Model>(entity).unwrap().src.clone();
+
+            world.commands().entity(entity).remove::<Model>();
+
+            let server = world.get_resource::<AssetServer>().unwrap();
+
+            let scene_root = SceneRoot(server.load(GltfAssetLabel::Scene(0).from_asset(src)));
+
+            world
+                .commands()
+                .entity(entity)
+                .remove::<Model>()
+                .insert(scene_root);
+        });
+    }
+}
+
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
 pub enum ModelSystems {
     Resolve,
@@ -23,17 +47,7 @@ pub struct ModelPlugin;
 
 impl Plugin for ModelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(First, (load, resolve).in_set(ModelSystems::Resolve));
-    }
-}
-
-fn load(server: Res<AssetServer>, mut commands: Commands, models_q: Query<(Entity, &Model)>) {
-    for (entity, model) in models_q.iter() {
-        let src = model.src.clone();
-
-        commands.entity(entity).remove::<Model>().insert(SceneRoot(
-            server.load(GltfAssetLabel::Scene(0).from_asset(src)),
-        ));
+        app.add_systems(First, resolve.in_set(ModelSystems::Resolve));
     }
 }
 
@@ -46,7 +60,7 @@ fn resolve(
     for (entity, children, extras) in models_q.iter() {
         commands.entity(entity).remove::<GltfExtras>();
 
-        if extras.value != "{\"Collider\":true}" {
+        if extras.value != "{\"collider\":true}" {
             continue;
         }
 

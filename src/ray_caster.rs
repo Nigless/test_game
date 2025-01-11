@@ -1,7 +1,14 @@
-use bevy::{ecs::entity, prelude::*};
+
+use bevy::{
+    ecs::component::{ComponentHooks, StorageType},
+    prelude::*,
+};
 use bevy_rapier3d::{
     plugin::RapierContext,
-    prelude::{Collider, QueryFilter, ShapeCastOptions},
+    prelude::{
+        Group, QueryFilter,
+        SolverGroups,
+    },
 };
 
 use crate::Debugging;
@@ -10,17 +17,21 @@ use crate::Debugging;
 pub struct RayCasterSystems;
 
 #[derive(Reflect)]
-pub struct CastResult {
+pub struct CasterResult {
+    pub entity: Entity,
     pub distance: f32,
     pub normal: Vec3,
 }
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
-#[require(Transform)]
+struct RayCasterFixed;
+
+#[derive(Reflect)]
+#[reflect(Component)]
 pub struct RayCaster {
     pub direction: Vec3,
-    pub result: Option<CastResult>,
+    pub result: Option<CasterResult>,
     pub fixed_update: bool,
     exclude: Option<Entity>,
 }
@@ -46,70 +57,98 @@ impl RayCaster {
     }
 }
 
+impl Component for RayCaster {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_add(|mut world, entity, _component_id| {
+            let fixed_update = world.get::<RayCaster>(entity).unwrap().fixed_update;
+
+            if fixed_update {
+                world.commands().entity(entity).insert(RayCasterFixed);
+            }
+
+            world.commands().entity(entity).insert(Transform::default());
+        });
+    }
+}
+
 pub struct RayCasterPlugin;
 
 impl Plugin for RayCasterPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<RayCaster>()
-            .add_systems(FixedPreUpdate, fixed_update.in_set(RayCasterSystems))
-            .add_systems(PreUpdate, update.in_set(RayCasterSystems));
+            .register_type::<RayCasterFixed>()
+            .add_systems(
+                FixedPreUpdate,
+                update::<RayCasterFixed>.in_set(RayCasterSystems),
+            )
+            .add_systems(PreUpdate, update::<RayCaster>.in_set(RayCasterSystems));
     }
 }
 
-fn fixed_update(
+fn update<T: Component>(
     debugging: Res<Debugging>,
     mut gizmos: Gizmos,
     rapier: Single<&RapierContext>,
-    mut entity_q: Query<(&mut RayCaster, &GlobalTransform), Without<RapierContext>>,
+    mut entity_q: Query<(&mut RayCaster, &GlobalTransform), (Without<RapierContext>, With<T>)>,
+    collider_q: Query<&SolverGroups, Without<RayCaster>>,
 ) {
-    for entity in entity_q.iter_mut() {
-        if !entity.0.fixed_update {
-            continue;
+    let predicate = |e| {
+        collider_q
+            .get(e)
+            .map(|g| g.memberships != Group::NONE)
+            .unwrap_or(true)
+    };
+
+    let mut filter = QueryFilter::default()
+        .exclude_sensors()
+        .predicate(&predicate);
+
+    for (mut caster, transform) in entity_q.iter_mut() {
+        filter.exclude_collider = caster.exclude;
+
+        if let Some((entity, time_of_impact, normal)) = rapier
+            .cast_ray_and_get_normal(
+                transform.translation(),
+                transform.rotation() * caster.direction,
+                1.0,
+                false,
+                filter,
+            )
+            .and_then(|(entity, hit)| Some((entity, hit.time_of_impact, hit.normal)))
+        {
+            caster.result = Some(CasterResult {
+                entity: rapier.collider_parent(entity).unwrap_or(entity),
+                distance: caster.direction.length() * time_of_impact,
+                normal,
+            });
+
+            if !debugging.enable {
+                return;
+            }
+
+            gizmos.ray(
+                transform.translation(),
+                transform.rotation() * caster.direction * time_of_impact,
+                Color::linear_rgb(1.0, 0.0, 0.0),
+            );
+
+            gizmos
+                .circle(
+                    Isometry3d::new(
+                        transform.translation()
+                            + transform.rotation() * caster.direction * time_of_impact
+                            + normal * 0.001,
+                        Quat::from_rotation_arc(Vec3::Z, normal),
+                    ),
+                    0.1,
+                    Color::linear_rgb(1.0, 0.0, 0.0),
+                )
+                .resolution(16);
+
+            return;
         }
-
-        update_entity(&debugging, &mut gizmos, &rapier, entity);
-    }
-}
-
-fn update(
-    debugging: Res<Debugging>,
-    mut gizmos: Gizmos,
-    rapier: Single<&RapierContext>,
-    mut entity_q: Query<(&mut RayCaster, &GlobalTransform), Without<RapierContext>>,
-) {
-    for entity in entity_q.iter_mut() {
-        if entity.0.fixed_update {
-            continue;
-        }
-
-        update_entity(&debugging, &mut gizmos, &rapier, entity);
-    }
-}
-
-fn update_entity(
-    debugging: &Res<Debugging>,
-    gizmos: &mut Gizmos,
-    rapier: &Single<&RapierContext>,
-    (mut shape_caster, transform): (Mut<'_, RayCaster>, &GlobalTransform),
-) {
-    let mut filter = QueryFilter::default();
-
-    filter.exclude_collider = shape_caster.exclude;
-
-    if let Some((time_of_impact, normal)) = rapier
-        .cast_ray_and_get_normal(
-            transform.translation(),
-            transform.rotation() * shape_caster.direction,
-            1.0,
-            false,
-            filter,
-        )
-        .and_then(|(_, hit)| Some((hit.time_of_impact, hit.normal)))
-    {
-        shape_caster.result = Some(CastResult {
-            distance: shape_caster.direction.length() * time_of_impact,
-            normal,
-        });
 
         if !debugging.enable {
             return;
@@ -117,35 +156,10 @@ fn update_entity(
 
         gizmos.ray(
             transform.translation(),
-            transform.rotation() * shape_caster.direction * time_of_impact,
-            Color::linear_rgb(1.0, 0.0, 0.0),
+            transform.rotation() * caster.direction,
+            Color::linear_rgb(0.0, 0.0, 1.0),
         );
 
-        gizmos
-            .circle(
-                Isometry3d::new(
-                    transform.translation()
-                        + transform.rotation() * shape_caster.direction * time_of_impact
-                        + normal * 0.001,
-                    Quat::from_rotation_arc(Vec3::Z, normal),
-                ),
-                0.1,
-                Color::linear_rgb(1.0, 0.0, 0.0),
-            )
-            .resolution(16);
-
-        return;
+        caster.result = None
     }
-
-    if !debugging.enable {
-        return;
-    }
-
-    gizmos.ray(
-        transform.translation(),
-        transform.rotation() * shape_caster.direction,
-        Color::linear_rgb(0.0, 0.0, 1.0),
-    );
-
-    shape_caster.result = None
 }

@@ -1,4 +1,4 @@
-use std::{env, f32::consts};
+use std::env;
 
 use bevy::{prelude::*, window::WindowMode};
 mod camera_controller;
@@ -9,16 +9,21 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
 use camera_controller::{CameraControllerPlugin, Spectate};
 use control::{Control, ControlPlugin, Input};
-use entities::ghost::{GhostBundle, GhostPlugin};
-use levels::test_level::TestLevel;
+use entities::{
+    block::BlockBundle,
+    ghost::{GhostBundle, GhostPlugin},
+};
+use levels::test_level::TestLevelBundle;
 use linker::LinkerPlugin;
-use model::{Model, ModelPlugin};
+use liquid::{Buoyant, Liquid, LiquidPlugin};
+use model::ModelPlugin;
 use ray_caster::RayCasterPlugin;
 use shape_caster::ShapeCasterPlugin;
 use throttle::ThrottlePlugin;
 mod levels;
 mod library;
 mod linker;
+mod liquid;
 mod ray_caster;
 mod shape_caster;
 mod throttle;
@@ -51,6 +56,7 @@ fn main() {
             LinkerPlugin,
             ThrottlePlugin,
             RayCasterPlugin,
+            LiquidPlugin,
         ))
         .insert_resource(AmbientLight {
             color: Color::WHITE,
@@ -99,5 +105,41 @@ fn screen_mode_update(mut input: ResMut<Input>, mut window: Single<&mut Window>)
 }
 
 fn startup(mut commands: Commands) {
-    commands.spawn(TestLevel::default());
+    commands.spawn(TestLevelBundle::default());
+    commands.spawn((
+        GhostBundle::new(),
+        Transform::from_xyz(0.0, 3.0, 0.0),
+        Buoyant::new(1.0),
+        Spectate,
+        Control,
+    ));
+
+    commands.spawn((
+        Collider::cuboid(10.0, 1.0, 10.0),
+        ActiveEvents::COLLISION_EVENTS,
+        Liquid::new(0.01),
+        SolverGroups::new(Group::NONE, Group::NONE),
+        Transform::from_xyz(0.0, 0.0, 20.0),
+    ));
+
+    commands.spawn((
+        BlockBundle::default(),
+        Transform::from_xyz(0.0, 2.0, 20.0),
+        Buoyant::new(0.4),
+        Velocity::default(),
+    ));
+
+    commands.spawn((
+        BlockBundle::new(3.0, 0.5, 3.0),
+        Transform::from_xyz(3.0, 2.0, 20.0),
+        Buoyant::new(0.4),
+        Velocity::default(),
+    ));
+
+    commands.spawn((
+        BlockBundle::new(3.0, 0.5, 3.0),
+        Transform::from_xyz(3.0, 3.0, 20.0),
+        Buoyant::new(0.4),
+        Velocity::default(),
+    ));
 }

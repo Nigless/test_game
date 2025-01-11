@@ -2,13 +2,11 @@ use std::f32::consts;
 
 use bevy::{
     core::Name,
-    ecs::component::{ComponentHooks, StorageType},
     prelude::{Bundle, Projection},
     utils::default,
 };
 use bevy_rapier3d::prelude::{
     CoefficientCombineRule, Collider, ColliderMassProperties, Friction, LockedAxes, RigidBody,
-    Velocity,
 };
 
 use crate::{ray_caster::RayCaster, shape_caster::ShapeCaster};

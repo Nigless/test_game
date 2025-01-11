@@ -1,4 +1,4 @@
-use std::f32::{consts, INFINITY};
+use std::f32::consts;
 
 use crate::camera_controller::CameraController;
 use crate::control::{Control, ControlSystems, Input};
@@ -19,17 +19,17 @@ mod components;
 mod entities;
 pub use entities::GhostBundle;
 
-pub const MAX_SLOPE_ANGLE: f32 = consts::PI / 3.8;
-pub const HAND_DISTANCE: f32 = 2.0;
-pub const COLLIDER_TRANSITION_SPEED: f32 = 0.1;
-pub const COLLIDER_RADIUS: f32 = 0.3;
-pub const MAX_SURFACE_GAP: f32 = 0.03 + SKIN_WIDTH;
-pub const SKIN_WIDTH: f32 = 0.05;
-pub const COLLIDER_HALF_HEIGHT: f32 = 1.0 - COLLIDER_RADIUS;
-pub const COLLIDER_CROUCHING_HALF_HEIGHT: f32 = COLLIDER_HALF_HEIGHT * 0.4;
+const MAX_SLOPE_ANGLE: f32 = consts::PI / 3.8;
+const HAND_DISTANCE: f32 = 2.0;
+const COLLIDER_TRANSITION_SPEED: f32 = 0.1;
+const COLLIDER_RADIUS: f32 = 0.3;
+const MAX_SURFACE_GAP: f32 = 0.03 + SKIN_WIDTH;
+const SKIN_WIDTH: f32 = 0.05;
+const COLLIDER_HALF_HEIGHT: f32 = 1.0 - COLLIDER_RADIUS;
+const COLLIDER_CROUCHING_HALF_HEIGHT: f32 = COLLIDER_HALF_HEIGHT * 0.4;
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
-pub enum GhostSystems {
+enum GhostSystems {
     Resolve,
     Update,
     Prepare,
@@ -72,8 +72,8 @@ impl Plugin for GhostPlugin {
     }
 }
 
-fn resolve(mut commands: Commands, mut entity_q: Query<(Entity, &Transform), With<Unresolved>>) {
-    for (entity, transform) in entity_q.iter_mut() {
+fn resolve(mut commands: Commands, mut entity_q: Query<Entity, With<Unresolved>>) {
+    for entity in entity_q.iter_mut() {
         let camera = commands.spawn(GhostCamera::new()).id();
 
         let ray_cast = commands.spawn(RayCast::new(entity)).id();

@@ -1,27 +1,38 @@
-use bevy::prelude::*;
-use bevy_inspector_egui::egui::util::cache;
+
+use bevy::{
+    ecs::component::{ComponentHooks, StorageType},
+    prelude::*,
+};
 use bevy_rapier3d::{
     plugin::RapierContext,
-    prelude::{Collider, QueryFilter, ShapeCastOptions},
+    prelude::{
+        Collider, Group, QueryFilter, ShapeCastOptions,
+        SolverGroups,
+    },
 };
+
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
 pub struct ShapeCasterSystems;
 
 #[derive(Reflect)]
-pub struct CastResult {
+pub struct CasterResult {
+    pub entity: Entity,
     pub distance: f32,
     pub normal: Vec3,
 }
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
-#[require(Transform)]
+struct ShapeCasterFixed;
+
+#[derive(Reflect)]
+#[reflect(Component)]
 pub struct ShapeCaster {
     #[reflect(ignore)]
     pub collider: Collider,
     pub direction: Vec3,
-    pub result: Option<CastResult>,
+    pub result: Option<CasterResult>,
     pub fixed_update: bool,
     exclude: Option<Entity>,
 }
@@ -29,22 +40,38 @@ pub struct ShapeCaster {
 impl ShapeCaster {
     pub fn new(collider: Collider, direction: Vec3) -> Self {
         Self {
-            collider,
             direction,
             result: None,
             fixed_update: false,
             exclude: None,
+            collider,
         }
+    }
+
+    pub fn exclude(mut self, entity: Entity) -> Self {
+        self.exclude = Some(entity);
+        self
     }
 
     pub fn fixed_update(mut self) -> Self {
         self.fixed_update = true;
         self
     }
+}
 
-    pub fn exclude(mut self, entity: Entity) -> Self {
-        self.exclude = Some(entity);
-        self
+impl Component for ShapeCaster {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_add(|mut world, entity, _component_id| {
+            let fixed_update = world.get::<ShapeCaster>(entity).unwrap().fixed_update;
+
+            if fixed_update {
+                world.commands().entity(entity).insert(ShapeCasterFixed);
+            }
+
+            world.commands().entity(entity).insert(Transform::default());
+        });
     }
 }
 
@@ -53,66 +80,60 @@ pub struct ShapeCasterPlugin;
 impl Plugin for ShapeCasterPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<ShapeCaster>()
-            .add_systems(FixedPreUpdate, fixed_update.in_set(ShapeCasterSystems))
-            .add_systems(PreUpdate, update.in_set(ShapeCasterSystems));
+            .register_type::<ShapeCasterFixed>()
+            .add_systems(
+                FixedPreUpdate,
+                update::<ShapeCasterFixed>.in_set(ShapeCasterSystems),
+            )
+            .add_systems(PreUpdate, update::<ShapeCaster>.in_set(ShapeCasterSystems));
     }
 }
 
-fn fixed_update(
+fn update<T: Component>(
     rapier: Single<&RapierContext>,
-    mut entity_q: Query<(&mut ShapeCaster, &GlobalTransform), Without<RapierContext>>,
+    mut entity_q: Query<(&mut ShapeCaster, &GlobalTransform), (Without<RapierContext>, With<T>)>,
+    collider_q: Query<&SolverGroups, Without<ShapeCaster>>,
 ) {
-    for entity in entity_q.iter_mut() {
-        if !entity.0.fixed_update {
-            continue;
+    let predicate = |e| {
+        collider_q
+            .get(e)
+            .map(|g| g.memberships != Group::NONE)
+            .unwrap_or(true)
+    };
+
+    let mut filter = QueryFilter::default()
+        .exclude_sensors()
+        .predicate(&predicate);
+
+    for (mut caster, transform) in entity_q.iter_mut() {
+        filter.exclude_collider = caster.exclude;
+
+        if let Some((entity, time_of_impact, normal)) = rapier
+            .cast_shape(
+                transform.translation(),
+                transform.rotation(),
+                caster.direction,
+                &caster.collider,
+                ShapeCastOptions {
+                    max_time_of_impact: 1.0,
+                    ..default()
+                },
+                filter,
+            )
+            .map_or(None, |(entity, hit)| {
+                hit.details
+                    .map(|details| (entity, hit.time_of_impact, details.normal1))
+            })
+        {
+            caster.result = Some(CasterResult {
+                entity: rapier.collider_parent(entity).unwrap_or(entity),
+                distance: caster.direction.length() * time_of_impact,
+                normal,
+            });
+
+            return;
         }
 
-        update_entity(&rapier, entity);
+        caster.result = None
     }
-}
-
-fn update(
-    rapier: Single<&RapierContext>,
-    mut entity_q: Query<(&mut ShapeCaster, &GlobalTransform), Without<RapierContext>>,
-) {
-    for entity in entity_q.iter_mut() {
-        if entity.0.fixed_update {
-            continue;
-        }
-
-        update_entity(&rapier, entity);
-    }
-}
-
-fn update_entity(
-    rapier: &Single<&RapierContext>,
-    (mut shape_caster, transform): (Mut<'_, ShapeCaster>, &GlobalTransform),
-) {
-    let mut filter = QueryFilter::default();
-
-    filter.exclude_collider = shape_caster.exclude;
-
-    if let Some((time_of_impact, normal)) = rapier
-        .cast_shape(
-            transform.translation(),
-            transform.rotation(),
-            shape_caster.direction,
-            &shape_caster.collider,
-            ShapeCastOptions::default(),
-            filter,
-        )
-        .map_or(None, |(_, hit)| {
-            hit.details
-                .map(|details| (hit.time_of_impact, details.normal1))
-        })
-    {
-        shape_caster.result = Some(CastResult {
-            distance: shape_caster.direction.length() * time_of_impact,
-            normal,
-        });
-
-        return;
-    }
-
-    shape_caster.result = None
 }
