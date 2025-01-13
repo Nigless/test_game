@@ -1,6 +1,6 @@
 use std::env;
 
-use bevy::{prelude::*, window::WindowMode};
+use bevy::{prelude::*, render::primitives::Aabb, window::WindowMode};
 mod camera_controller;
 mod control;
 mod entities;
@@ -15,8 +15,9 @@ use entities::{
 };
 use levels::test_level::TestLevelBundle;
 use linker::LinkerPlugin;
-use liquid::{Buoyant, Liquid, LiquidPlugin};
+use liquid::{Liquid, LiquidPlugin};
 use model::ModelPlugin;
+use random::RandomPlugin;
 use ray_caster::RayCasterPlugin;
 use shape_caster::ShapeCasterPlugin;
 use throttle::ThrottlePlugin;
@@ -24,6 +25,7 @@ mod levels;
 mod library;
 mod linker;
 mod liquid;
+mod random;
 mod ray_caster;
 mod shape_caster;
 mod throttle;
@@ -35,12 +37,6 @@ mod with_mesh;
 pub enum AppSystems {
     Startup,
     Update,
-}
-
-#[derive(Resource, Reflect, Default)]
-#[reflect(Resource)]
-pub struct Debugging {
-    enable: bool,
 }
 
 fn main() {
@@ -57,26 +53,22 @@ fn main() {
             ThrottlePlugin,
             RayCasterPlugin,
             LiquidPlugin,
+            RandomPlugin::default(),
         ))
         .insert_resource(AmbientLight {
             color: Color::WHITE,
             brightness: 100.0,
         })
-        .insert_resource(Debugging::default())
         .insert_resource(ClearColor(Color::srgb(0.8, 0.9, 1.0)))
         .add_systems(Startup, startup.in_set(AppSystems::Startup))
         .add_systems(PreUpdate, screen_mode_update.in_set(AppSystems::Update));
 
-    let debug = env::var("DEBUG").unwrap_or("".to_owned());
-
-    if debug == "true" {
-        app = app
-            .add_plugins((
-                RapierDebugRenderPlugin::default(),
-                WorldInspectorPlugin::default(),
-            ))
-            .register_type::<Debugging>()
-            .insert_resource(Debugging { enable: true });
+    #[cfg(debug_assertions)]
+    {
+        app = app.add_plugins((
+            RapierDebugRenderPlugin::default(),
+            WorldInspectorPlugin::default(),
+        ));
     }
 
     app.run();
@@ -109,7 +101,6 @@ fn startup(mut commands: Commands) {
     commands.spawn((
         GhostBundle::new(),
         Transform::from_xyz(0.0, 3.0, 0.0),
-        Buoyant::new(1.0),
         Spectate,
         Control,
     ));
@@ -117,29 +108,38 @@ fn startup(mut commands: Commands) {
     commands.spawn((
         Collider::cuboid(10.0, 1.0, 10.0),
         ActiveEvents::COLLISION_EVENTS,
-        Liquid::new(0.01),
+        Liquid::new(1000.0),
         SolverGroups::new(Group::NONE, Group::NONE),
         Transform::from_xyz(0.0, 0.0, 20.0),
     ));
 
     commands.spawn((
         BlockBundle::default(),
+        Transform::from_xyz(0.0, 1.0, 20.0),
+        Velocity::default(),
+    ));
+
+    commands.spawn((
+        BlockBundle::default(),
+        Transform::from_xyz(1.0, 1.0, 20.0),
+        Velocity::default(),
+    ));
+
+    commands.spawn((
+        BlockBundle::default(),
+        Transform::from_xyz(2.0, 1.0, 20.0),
+        Velocity::default(),
+    ));
+
+    commands.spawn((
+        BlockBundle::default(),
         Transform::from_xyz(0.0, 2.0, 20.0),
-        Buoyant::new(0.4),
         Velocity::default(),
     ));
 
     commands.spawn((
         BlockBundle::new(3.0, 0.5, 3.0),
         Transform::from_xyz(3.0, 2.0, 20.0),
-        Buoyant::new(0.4),
-        Velocity::default(),
-    ));
-
-    commands.spawn((
-        BlockBundle::new(3.0, 0.5, 3.0),
-        Transform::from_xyz(3.0, 3.0, 20.0),
-        Buoyant::new(0.4),
         Velocity::default(),
     ));
 }

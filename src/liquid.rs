@@ -1,26 +1,40 @@
-use bevy::{app::Plugin, ecs::component::Component, prelude::*};
-use bevy_rapier3d::{
-    plugin::{RapierConfiguration, RapierContext},
-    prelude::{CollisionEvent, ExternalImpulse, Velocity},
+use bevy::{
+    app::Plugin,
+    color::palettes::{
+        css::{BLUE, RED},
+        tailwind::{BLUE_200, BLUE_500},
+    },
+    ecs::component::Component,
+    gizmos,
+    log::tracing_subscriber::field::debug,
+    prelude::*,
+    render::primitives::Aabb,
 };
+use bevy_rapier3d::{
+    na::{Isometry, Isometry3, Quaternion, Vector},
+    plugin::{RapierConfiguration, RapierContext},
+    prelude::*,
+};
+
+use bevy_rapier3d::na::Unit;
+
+use crate::random::Random;
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
 pub struct Liquid {
-    viscosity: f32,
+    density: f32,
 }
 
 impl Default for Liquid {
     fn default() -> Self {
-        Self { viscosity: 0.5 }
+        Self { density: 0.5 }
     }
 }
 
 impl Liquid {
-    pub fn new(viscosity: f32) -> Self {
-        Self {
-            viscosity: viscosity,
-        }
+    pub fn new(density: f32) -> Self {
+        Self { density }
     }
 }
 
@@ -28,24 +42,6 @@ impl Liquid {
 #[reflect(Component)]
 pub struct Floating {
     pool: Entity,
-}
-
-#[derive(Component, Reflect)]
-#[reflect(Component)]
-pub struct Buoyant {
-    force: f32,
-}
-
-impl Default for Buoyant {
-    fn default() -> Self {
-        Self { force: 1.0 }
-    }
-}
-
-impl Buoyant {
-    pub fn new(force: f32) -> Self {
-        Self { force: force }
-    }
 }
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
@@ -59,7 +55,6 @@ pub struct LiquidPlugin;
 impl Plugin for LiquidPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Liquid>()
-            .register_type::<Buoyant>()
             .register_type::<Floating>()
             .add_systems(FixedFirst, resolve.in_set(LiquidSystems::Resolve))
             .add_systems(FixedPreUpdate, update.in_set(LiquidSystems::Update));
@@ -99,19 +94,14 @@ fn resolve(
 }
 
 fn update(
+    mut gizmos: Gizmos,
     rapier: Single<&RapierContext>,
     config: Single<&RapierConfiguration>,
     mut commands: Commands,
-    mut collider_q: Query<(
-        Entity,
-        &Floating,
-        &GlobalTransform,
-        &Velocity,
-        Option<&Buoyant>,
-    )>,
-    liquid_q: Query<&mut Liquid, Without<Floating>>,
+    mut collider_q: Query<(Entity, &Collider, &Floating, &GlobalTransform, &Velocity)>,
+    liquid_q: Query<(&mut Liquid, &GlobalTransform, &Collider), Without<Floating>>,
 ) {
-    for (entity, floating, transform, velocity, buoyant) in collider_q.iter_mut() {
+    for (entity, collider, floating, transform, velocity) in collider_q.iter_mut() {
         let Some(contact) = rapier.contact_pair(floating.pool, entity) else {
             continue;
         };
@@ -122,26 +112,79 @@ fn update(
 
         let mut external_impulse = ExternalImpulse::default();
 
-        let position = transform.translation();
+        let collider_position = transform.translation();
 
-        let liquid = liquid_q.get(floating.pool).unwrap();
+        let (liquid, pool_transform, pool_collider) = liquid_q.get(floating.pool).unwrap();
 
-        let buoyant_force = -config.gravity.normalize() * buoyant.map(|b| b.force).unwrap_or(1.0);
+        let pool_position = pool_transform.translation();
 
-        for point in manifold.points() {
-            let distance = point.dist().abs();
+        let buoyant_force = -config.gravity * liquid.density;
 
-            let linear_resistance = -velocity.linvel * (liquid.viscosity * distance).min(1.0);
-            let angular_resistance = -velocity.angvel * (liquid.viscosity * distance).min(1.0);
+        manifold.point(0).unwrap().local_p1();
 
-            let impulse = buoyant_force * distance + linear_resistance;
+        let collider_aabb = collider.raw.compute_aabb(&Isometry3::from_parts(
+            transform.translation().into(),
+            transform.rotation().into(),
+        ));
 
-            let point_position = position + (-transform.rotation() * point.local_p2());
+        let pool_aabb = pool_collider.raw.compute_aabb(&Isometry3::from_parts(
+            pool_transform.translation().into(),
+            pool_transform.rotation().into(),
+        ));
 
-            external_impulse +=
-                ExternalImpulse::at_point(impulse / points_len, point_position, position);
+        let Some(intersection_aabb) = pool_aabb.intersection(&collider_aabb) else {
+            continue;
+        };
 
-            external_impulse.torque_impulse += angular_resistance;
+        let grid_resolution = 5.0;
+
+        let min_x = (intersection_aabb.mins.x * grid_resolution) as i32 + 1;
+        let max_x = (intersection_aabb.maxs.x * grid_resolution) as i32 + 1;
+
+        let min_y = (intersection_aabb.mins.y * grid_resolution) as i32 + 1;
+        let max_y = (intersection_aabb.maxs.y * grid_resolution) as i32 + 1;
+
+        let min_z = (intersection_aabb.mins.z * grid_resolution) as i32 + 1;
+        let max_z = (intersection_aabb.maxs.z * grid_resolution) as i32 + 1;
+
+        let filter = QueryFilter::default();
+
+        for x in min_x..max_x {
+            for y in min_y..max_y {
+                for z in min_z..max_z {
+                    let position = Vec3::new(
+                        (x as f32) / grid_resolution,
+                        (y as f32) / grid_resolution,
+                        (z as f32) / grid_resolution,
+                    );
+
+                    let point = Transform::from_translation(position)
+                        .with_scale(Vec3::ONE / grid_resolution);
+
+                    let mut inside_collider = false;
+                    let mut inside_pool = false;
+
+                    rapier.intersections_with_point(position, filter, |e| {
+                        inside_collider = inside_collider || e == entity;
+                        inside_pool = inside_pool || e == floating.pool;
+
+                        !inside_collider || !inside_pool
+                    });
+
+                    if !inside_collider || !inside_pool {
+                        continue;
+                    }
+
+                    external_impulse += ExternalImpulse::at_point(
+                        buoyant_force / grid_resolution.powi(3),
+                        position,
+                        collider_position,
+                    );
+
+                    #[cfg(debug_assertions)]
+                    gizmos.cuboid(point, BLUE_500);
+                }
+            }
         }
 
         commands.entity(entity).insert(external_impulse);

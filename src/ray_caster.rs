@@ -1,17 +1,11 @@
-
 use bevy::{
     ecs::component::{ComponentHooks, StorageType},
     prelude::*,
 };
 use bevy_rapier3d::{
     plugin::RapierContext,
-    prelude::{
-        Group, QueryFilter,
-        SolverGroups,
-    },
+    prelude::{Group, QueryFilter, SolverGroups},
 };
-
-use crate::Debugging;
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
 pub struct RayCasterSystems;
@@ -88,7 +82,6 @@ impl Plugin for RayCasterPlugin {
 }
 
 fn update<T: Component>(
-    debugging: Res<Debugging>,
     mut gizmos: Gizmos,
     rapier: Single<&RapierContext>,
     mut entity_q: Query<(&mut RayCaster, &GlobalTransform), (Without<RapierContext>, With<T>)>,
@@ -124,9 +117,8 @@ fn update<T: Component>(
                 normal,
             });
 
-            if !debugging.enable {
-                return;
-            }
+            #[cfg(debug_assertions)]
+            return;
 
             gizmos.ray(
                 transform.translation(),
@@ -150,9 +142,8 @@ fn update<T: Component>(
             return;
         }
 
-        if !debugging.enable {
-            return;
-        }
+        #[cfg(debug_assertions)]
+        return;
 
         gizmos.ray(
             transform.translation(),

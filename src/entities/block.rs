@@ -21,7 +21,7 @@ impl Default for BlockBundle {
             material: WithMaterial::new(Color::srgb_u8(255, 255, 255)),
             collider: Collider::cuboid(0.5, 0.5, 0.5),
             body: RigidBody::Dynamic,
-            collider_mass_properties: ColliderMassProperties::Mass(1.0),
+            collider_mass_properties: ColliderMassProperties::Mass(100.0),
         }
     }
 }
@@ -31,10 +31,8 @@ impl BlockBundle {
         Self {
             name: Name::new("block"),
             mesh: WithMesh::new(Cuboid::new(hx, hy, hz)),
-            material: WithMaterial::new(Color::srgb_u8(255, 255, 255)),
             collider: Collider::cuboid(hx / 2.0, hy / 2.0, hz / 2.0),
-            body: RigidBody::Dynamic,
-            collider_mass_properties: ColliderMassProperties::Mass(1.0),
+            ..default()
         }
     }
 }
