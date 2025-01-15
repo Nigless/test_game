@@ -10,7 +10,7 @@ use rand_chacha::ChaCha8Rng;
 
 #[derive(Resource, PartialEq)]
 pub struct Random {
-    rand: ChaCha8Rng,
+    pub rand: ChaCha8Rng,
 }
 
 impl Default for Random {

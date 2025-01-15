@@ -1,16 +1,11 @@
-
 use bevy::{
     ecs::component::{ComponentHooks, StorageType},
     prelude::*,
 };
 use bevy_rapier3d::{
     plugin::RapierContext,
-    prelude::{
-        Collider, Group, QueryFilter, ShapeCastOptions,
-        SolverGroups,
-    },
+    prelude::{Collider, Group, QueryFilter, ShapeCastOptions, SolverGroups},
 };
-
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
 pub struct ShapeCasterSystems;
@@ -92,18 +87,8 @@ impl Plugin for ShapeCasterPlugin {
 fn update<T: Component>(
     rapier: Single<&RapierContext>,
     mut entity_q: Query<(&mut ShapeCaster, &GlobalTransform), (Without<RapierContext>, With<T>)>,
-    collider_q: Query<&SolverGroups, Without<ShapeCaster>>,
 ) {
-    let predicate = |e| {
-        collider_q
-            .get(e)
-            .map(|g| g.memberships != Group::NONE)
-            .unwrap_or(true)
-    };
-
-    let mut filter = QueryFilter::default()
-        .exclude_sensors()
-        .predicate(&predicate);
+    let mut filter = QueryFilter::default().exclude_sensors();
 
     for (mut caster, transform) in entity_q.iter_mut() {
         filter.exclude_collider = caster.exclude;

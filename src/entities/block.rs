@@ -21,7 +21,7 @@ impl Default for BlockBundle {
             material: WithMaterial::new(Color::srgb_u8(255, 255, 255)),
             collider: Collider::cuboid(0.5, 0.5, 0.5),
             body: RigidBody::Dynamic,
-            collider_mass_properties: ColliderMassProperties::Mass(100.0),
+            collider_mass_properties: ColliderMassProperties::Mass(500.0),
         }
     }
 }
@@ -34,5 +34,10 @@ impl BlockBundle {
             collider: Collider::cuboid(hx / 2.0, hy / 2.0, hz / 2.0),
             ..default()
         }
+    }
+
+    pub fn with_mass(mut self, mass: f32) -> Self {
+        self.collider_mass_properties = ColliderMassProperties::Mass(mass);
+        self
     }
 }

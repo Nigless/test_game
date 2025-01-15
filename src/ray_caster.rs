@@ -85,18 +85,8 @@ fn update<T: Component>(
     mut gizmos: Gizmos,
     rapier: Single<&RapierContext>,
     mut entity_q: Query<(&mut RayCaster, &GlobalTransform), (Without<RapierContext>, With<T>)>,
-    collider_q: Query<&SolverGroups, Without<RayCaster>>,
 ) {
-    let predicate = |e| {
-        collider_q
-            .get(e)
-            .map(|g| g.memberships != Group::NONE)
-            .unwrap_or(true)
-    };
-
-    let mut filter = QueryFilter::default()
-        .exclude_sensors()
-        .predicate(&predicate);
+    let mut filter = QueryFilter::default().exclude_sensors();
 
     for (mut caster, transform) in entity_q.iter_mut() {
         filter.exclude_collider = caster.exclude;
@@ -117,7 +107,7 @@ fn update<T: Component>(
                 normal,
             });
 
-            #[cfg(debug_assertions)]
+            #[cfg(not(debug_assertions))]
             return;
 
             gizmos.ray(
@@ -142,7 +132,7 @@ fn update<T: Component>(
             return;
         }
 
-        #[cfg(debug_assertions)]
+        #[cfg(not(debug_assertions))]
         return;
 
         gizmos.ray(

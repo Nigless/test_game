@@ -1,6 +1,6 @@
 use std::env;
 
-use bevy::{prelude::*, render::primitives::Aabb, window::WindowMode};
+use bevy::{pbr::NotShadowCaster, prelude::*, render::primitives::Aabb, window::WindowMode};
 mod camera_controller;
 mod control;
 mod entities;
@@ -21,6 +21,8 @@ use random::RandomPlugin;
 use ray_caster::RayCasterPlugin;
 use shape_caster::ShapeCasterPlugin;
 use throttle::ThrottlePlugin;
+use with_material::WithMaterial;
+use with_mesh::WithMesh;
 mod levels;
 mod library;
 mod linker;
@@ -107,39 +109,42 @@ fn startup(mut commands: Commands) {
 
     commands.spawn((
         Collider::cuboid(10.0, 1.0, 10.0),
+        WithMesh::new(Cuboid::new(20.0, 2.0, 20.0)),
+        WithMaterial::new(Color::srgba(0.7, 0.7, 1.0, 0.2)),
         ActiveEvents::COLLISION_EVENTS,
-        Liquid::new(1000.0),
-        SolverGroups::new(Group::NONE, Group::NONE),
+        NotShadowCaster,
+        Sensor,
+        Liquid::new(1000.0).with_sample_count(200),
         Transform::from_xyz(0.0, 0.0, 20.0),
     ));
 
     commands.spawn((
         BlockBundle::default(),
-        Transform::from_xyz(0.0, 1.0, 20.0),
+        Transform::from_xyz(-4.0, 3.0, 16.0),
         Velocity::default(),
     ));
 
     commands.spawn((
         BlockBundle::default(),
-        Transform::from_xyz(1.0, 1.0, 20.0),
+        Transform::from_xyz(-4.0, 3.0, 24.0),
         Velocity::default(),
     ));
 
     commands.spawn((
         BlockBundle::default(),
-        Transform::from_xyz(2.0, 1.0, 20.0),
+        Transform::from_xyz(4.0, 3.0, 16.0),
         Velocity::default(),
     ));
 
     commands.spawn((
-        BlockBundle::default(),
+        BlockBundle::new(3.0, 0.2, 3.0),
+        Transform::from_xyz(4.0, 3.0, 24.0),
+        Velocity::default(),
+    ));
+
+    commands.spawn((
+        BlockBundle::new(0.5, 0.5, 0.5).with_mass(25.0 / 2.0),
         Transform::from_xyz(0.0, 2.0, 20.0),
-        Velocity::default(),
-    ));
-
-    commands.spawn((
-        BlockBundle::new(3.0, 0.5, 3.0),
-        Transform::from_xyz(3.0, 2.0, 20.0),
         Velocity::default(),
     ));
 }

@@ -1,6 +1,7 @@
 use std::f32::consts;
 
 use bevy::{
+    audio::Volume,
     core::Name,
     prelude::{Bundle, Projection},
     utils::default,
@@ -9,7 +10,7 @@ use bevy_rapier3d::prelude::{
     CoefficientCombineRule, Collider, ColliderMassProperties, Friction, LockedAxes, RigidBody,
 };
 
-use crate::{ray_caster::RayCaster, shape_caster::ShapeCaster};
+use crate::{liquid::VolumeScale, ray_caster::RayCaster, shape_caster::ShapeCaster};
 
 use super::{
     components::*, COLLIDER_CROUCHING_HALF_HEIGHT, COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS,
@@ -30,6 +31,7 @@ pub struct GhostBundle {
     lock: LockedAxes,
     friction: Friction,
     mass: ColliderMassProperties,
+    volume_scale: VolumeScale,
 }
 
 impl GhostBundle {
@@ -45,6 +47,7 @@ impl GhostBundle {
             },
             mass: ColliderMassProperties::Mass(65.0),
             parameters: default(),
+            volume_scale: VolumeScale::new(0.5),
         }
     }
 }
