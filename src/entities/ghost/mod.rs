@@ -4,13 +4,14 @@ use crate::camera_controller::CameraController;
 use crate::control::{Control, ControlSystems, Input};
 use crate::library::move_toward;
 use crate::linker::Linker;
+use crate::liquid::Floating;
 use crate::ray_caster::RayCasterSystems;
 use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
 
 use bevy_rapier3d::dynamics::Velocity;
 
-use bevy_rapier3d::plugin::RapierConfiguration;
-use bevy_rapier3d::prelude::{Collider, GravityScale};
+use bevy_rapier3d::plugin::{RapierConfiguration, RapierContext};
+use bevy_rapier3d::prelude::{Collider, GravityScale, QueryFilter};
 
 use bevy::prelude::*;
 use components::{Parameters, Status, Unresolved};
@@ -64,6 +65,7 @@ impl Plugin for GhostPlugin {
                         collider,
                         moving,
                         falling.run_if(|input: Res<Input>| input.moving.length() > 0.0),
+                        swimming,
                         jumping,
                     )
                         .in_set(GhostSystems::FixedUpdate),
@@ -111,14 +113,17 @@ fn ground_check(
         &mut GravityScale,
         &mut Transform,
         &mut Velocity,
+        Option<&Floating>,
     )>,
-    time: Res<Time>,
+    time: Res<Time<Fixed>>,
     caster_q: Query<&ShapeCaster, Without<Status>>,
     config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
     let config = config_q.get_single().unwrap();
 
-    for (linker, mut status, mut gravity, mut transform, mut velocity) in entity_q.iter_mut() {
+    for (linker, mut status, mut gravity, mut transform, mut velocity, floating) in
+        entity_q.iter_mut()
+    {
         status.can_standup = true;
 
         status.surface = None;
@@ -139,6 +144,10 @@ fn ground_check(
             if cast_up_result.distance + cast_down_result.distance < COLLIDER_HALF_HEIGHT * 2.0 {
                 status.can_standup = false;
             }
+        }
+
+        if floating.is_some() {
+            continue;
         }
 
         let gravity_direction = config.gravity.normalize();
@@ -187,15 +196,24 @@ fn camera(
 
 fn collider(
     input: Res<Input>,
-    time: Res<Time>,
-    mut entity_q: Query<(&mut Collider, &mut Status, &mut Transform, &Linker), With<Control>>,
+    time: Res<Time<Fixed>>,
+    mut entity_q: Query<
+        (
+            &mut Collider,
+            &mut Status,
+            &mut Transform,
+            &Linker,
+            Option<&Floating>,
+        ),
+        With<Control>,
+    >,
     caster_q: Query<&ShapeCaster, Without<Status>>,
     mut head_q: Query<&mut Transform, Without<Status>>,
     config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
     let config = config_q.get_single().unwrap();
 
-    for (mut collider, mut status, mut transform, linker) in entity_q.iter_mut() {
+    for (mut collider, mut status, mut transform, linker, floating) in entity_q.iter_mut() {
         let cast_down = caster_q.get(*linker.get("cast_down").unwrap()).unwrap();
         let cast_up = caster_q.get(*linker.get("cast_up").unwrap()).unwrap();
 
@@ -218,13 +236,17 @@ fn collider(
         };
 
         let get_height_diff = || {
-            let target_height = if input.crouching {
+            let mut target_height = if input.crouching {
                 COLLIDER_CROUCHING_HALF_HEIGHT
             } else if status.can_standup {
                 COLLIDER_HALF_HEIGHT
             } else {
                 return 0.0;
             };
+
+            if floating.is_some() && status.can_standup {
+                target_height = COLLIDER_HALF_HEIGHT
+            }
 
             if status.current_collider_height == target_height {
                 return 0.0;
@@ -284,15 +306,18 @@ fn collider(
 }
 
 fn moving(
-    time: Res<Time>,
+    time: Res<Time<Fixed>>,
     input: Res<Input>,
-    mut entity_q: Query<(
-        &mut Velocity,
-        &Transform,
-        &Parameters,
-        &Status,
-        Option<&Control>,
-    )>,
+    mut entity_q: Query<
+        (
+            &mut Velocity,
+            &Transform,
+            &Parameters,
+            &Status,
+            Option<&Control>,
+        ),
+        Without<Floating>,
+    >,
 ) {
     for (mut velocity, transform, parameters, status, control) in entity_q.iter_mut() {
         let Some(ground_surface) = status.surface else {
@@ -331,8 +356,54 @@ fn moving(
     }
 }
 
+fn swimming(
+    time: Res<Time<Fixed>>,
+    input: Res<Input>,
+    rapier: Single<&RapierContext, Without<Floating>>,
+    mut entity_q: Query<
+        (
+            &mut Velocity,
+            &Transform,
+            &GlobalTransform,
+            &Parameters,
+            &Floating,
+        ),
+        With<Control>,
+    >,
+) {
+    let filter = QueryFilter::default();
+
+    for (mut velocity, transform, global_transform, parameters, floating) in entity_q.iter_mut() {
+        let mut vertical_direction: f32 = 0.0;
+
+        if input.swimming_up {
+            vertical_direction += 1.0;
+        }
+
+        if input.swimming_down {
+            vertical_direction -= 1.0;
+        }
+
+        let mut can_swim_up = false;
+
+        rapier.intersections_with_point(global_transform.translation(), filter, |e| {
+            can_swim_up = floating.pool() == e;
+            !can_swim_up
+        });
+
+        if !can_swim_up {
+            vertical_direction = vertical_direction.min(0.0);
+        }
+
+        let direction = transform.rotation
+            * Vec3::new(input.moving.x, vertical_direction, input.moving.y).normalize_or_zero();
+
+        velocity.linvel += direction * parameters.swimming_speed * time.delta_secs();
+    }
+}
+
 fn falling(
-    time: Res<Time>,
+    time: Res<Time<Fixed>>,
     input: Res<Input>,
     mut entity_q: Query<(&mut Velocity, &Transform, &Parameters, &Status), With<Control>>,
     config_q: Query<&RapierConfiguration, Without<Status>>,

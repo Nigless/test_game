@@ -47,7 +47,7 @@ impl GhostBundle {
             },
             mass: ColliderMassProperties::Mass(65.0),
             parameters: default(),
-            volume_scale: VolumeScale::new(0.5),
+            volume_scale: VolumeScale::new(0.2),
         }
     }
 }

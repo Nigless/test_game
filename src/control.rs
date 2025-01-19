@@ -17,6 +17,8 @@ pub struct Bindings {
     pub move_left: KeyCode,
     pub move_right: KeyCode,
     pub move_backward: KeyCode,
+    pub swim_up: KeyCode,
+    pub swim_down: KeyCode,
     pub jump: KeyCode,
     pub crouch: KeyCode,
     pub run: KeyCode,
@@ -38,6 +40,8 @@ impl Default for Bindings {
             pause: KeyCode::Escape,
             switch_full_screen: KeyCode::F11,
             mouse_sensitivity: 0.002,
+            swim_up: KeyCode::Space,
+            swim_down: KeyCode::ControlLeft,
         }
     }
 }
@@ -49,6 +53,8 @@ pub struct Input {
     looking: Vec2,
     jumping: bool,
     pub running: bool,
+    pub swimming_up: bool,
+    pub swimming_down: bool,
     pub crouching: bool,
     pub pausing: bool,
     full_screen_switching: bool,
@@ -134,6 +140,8 @@ fn update(
         input.full_screen_switching || keyboard.just_pressed(controls.switch_full_screen);
     input.running = keyboard.pressed(controls.run);
     input.crouching = keyboard.pressed(controls.crouch);
+    input.swimming_up = keyboard.pressed(controls.swim_up);
+    input.swimming_down = keyboard.pressed(controls.swim_down);
 
     input.pausing = keyboard.just_pressed(controls.pause);
 }
