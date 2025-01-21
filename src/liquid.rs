@@ -43,6 +43,12 @@ impl Default for Liquid {
     }
 }
 
+impl Floating {
+    pub fn pool(&self) -> Entity {
+        self.pool
+    }
+}
+
 #[derive(Component, Reflect)]
 #[reflect(Component)]
 pub struct VolumeScale {
