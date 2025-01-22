@@ -9,6 +9,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
 use camera_controller::{CameraControllerPlugin, Spectate};
 use control::{Control, ControlPlugin, Input};
+use despawn::{Despawn, DespawnPlugin};
 use entities::{
     block::BlockBundle,
     ghost::{GhostBundle, GhostPlugin},
@@ -23,6 +24,7 @@ use shape_caster::ShapeCasterPlugin;
 use throttle::ThrottlePlugin;
 use with_material::WithMaterial;
 use with_mesh::WithMesh;
+mod despawn;
 mod levels;
 mod library;
 mod linker;
@@ -56,6 +58,7 @@ fn main() {
             RayCasterPlugin,
             LiquidPlugin,
             RandomPlugin::default(),
+            DespawnPlugin,
         ))
         .insert_resource(AmbientLight {
             color: Color::WHITE,
