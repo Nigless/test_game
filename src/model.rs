@@ -102,29 +102,25 @@ fn resolve(
             commands.entity(entity).insert_reflect(value);
         }
 
-        if !extras
-            .get("collider")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-        {
+        let Some(convex_hull) = extras.get("collider").and_then(|v| v.as_bool()) else {
             continue;
-        }
+        };
 
         let mesh = meshes_q.get(children[0]).unwrap();
 
         let mesh = meshes_res.get(mesh).unwrap();
 
-        commands.entity(children[0]).despawn();
+        commands.entity(children[0]).try_despawn();
+
+        let mut shape = ComputedColliderShape::TriMesh(TriMeshFlags::all());
+
+        if convex_hull {
+            shape = ComputedColliderShape::ConvexHull
+        }
 
         commands
             .entity(entity)
-            .insert(
-                Collider::from_bevy_mesh(
-                    mesh,
-                    &ComputedColliderShape::TriMesh(TriMeshFlags::all()),
-                )
-                .unwrap(),
-            )
+            .try_insert(Collider::from_bevy_mesh(mesh, &shape).unwrap())
             .remove::<Children>();
     }
 }

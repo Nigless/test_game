@@ -3,10 +3,7 @@ use std::f32::consts;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::RigidBody;
 
-use crate::{
-    model::Model,
-    with_child::WithChild,
-};
+use crate::{model::Model, with_child::WithChild};
 
 #[derive(Bundle)]
 pub struct TestLevelBundle {
@@ -20,7 +17,7 @@ impl Default for TestLevelBundle {
     fn default() -> Self {
         Self {
             name: Name::new("test_scene"),
-            model: Model::new("test_scene.glb"),
+            model: Model::new("test_scene/model.glb"),
             body: RigidBody::Fixed,
             light: default(),
         }
