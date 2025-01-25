@@ -108,7 +108,7 @@ fn update<T: Component>(
             });
 
             #[cfg(not(debug_assertions))]
-            return;
+            continue;
 
             gizmos.ray(
                 transform.translation(),
@@ -129,11 +129,11 @@ fn update<T: Component>(
                 )
                 .resolution(16);
 
-            return;
+            continue;
         }
 
         #[cfg(not(debug_assertions))]
-        return;
+        continue;
 
         gizmos.ray(
             transform.translation(),

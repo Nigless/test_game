@@ -116,7 +116,7 @@ fn update<T: Component>(
                 normal,
             });
 
-            return;
+            continue;
         }
 
         caster.result = None
