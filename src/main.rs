@@ -12,9 +12,10 @@ use control::{Control, ControlPlugin, Input};
 use despawn::{Despawn, DespawnPlugin};
 use entities::{
     block::BlockBundle,
-    ghost::{GhostBundle, GhostPlugin},
+    player::{GhostPlugin, Player},
 };
 use levels::test_level::TestLevelBundle;
+use library::Spawnable;
 use linker::LinkerPlugin;
 use liquid::{Liquid, LiquidPlugin};
 use model::ModelPlugin;
@@ -65,7 +66,7 @@ fn main() {
             brightness: 100.0,
         })
         .insert_resource(ClearColor(Color::srgb(0.8, 0.9, 1.0)))
-        .add_systems(Startup, startup.in_set(AppSystems::Startup))
+        .add_systems(PreStartup, startup.in_set(AppSystems::Startup))
         .add_systems(PreUpdate, screen_mode_update.in_set(AppSystems::Update));
 
     #[cfg(debug_assertions)]
@@ -102,13 +103,13 @@ fn screen_mode_update(mut input: ResMut<Input>, mut window: Single<&mut Window>)
 }
 
 fn startup(mut commands: Commands) {
-    commands.spawn(TestLevelBundle::default());
-    commands.spawn((
-        GhostBundle::new(),
-        Transform::from_xyz(0.0, 3.0, 0.0),
-        Spectate,
-        Control,
-    ));
+    commands.spawn(TestLevelBundle::bundle());
+
+    let player = Player.spawn(&mut commands);
+
+    commands
+        .entity(player)
+        .insert((Transform::from_xyz(0.0, 3.0, 0.0), Spectate, Control));
 
     commands.spawn((
         Collider::cuboid(10.0, 1.0, 10.0),

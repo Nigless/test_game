@@ -1,2 +1,2 @@
 pub mod block;
-pub mod ghost;
+pub mod player;

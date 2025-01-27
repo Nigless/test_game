@@ -1,16 +1,14 @@
 use bevy::{prelude::Component, reflect::Reflect};
 
+use crate::with_child::WithChild;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{GravityScale, Velocity};
 
-use super::COLLIDER_HALF_HEIGHT;
-
-#[derive(Component, Default)]
-pub struct Unresolved;
+use super::{Player, COLLIDER_HALF_HEIGHT};
 
 #[derive(Component, Reflect, PartialEq)]
 #[reflect(Component)]
-#[require(GravityScale, Status, Unresolved, Velocity)]
+#[require(GravityScale, Status, Velocity)]
 pub struct Parameters {
     pub walking_speed: f32,
     pub falling_speed: f32,

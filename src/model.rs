@@ -33,7 +33,7 @@ impl Component for Model {
     const STORAGE_TYPE: StorageType = StorageType::Table;
 
     fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_add(|mut world, entity, _component_id| {
+        hooks.on_add(|mut world, entity, _| {
             let src = world.get_mut::<Model>(entity).unwrap().src.clone();
 
             world.commands().entity(entity).remove::<Model>();

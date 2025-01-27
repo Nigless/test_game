@@ -1,5 +1,8 @@
 use bevy::{
-    ecs::component::{ComponentHooks, StorageType},
+    ecs::{
+        component::{ComponentHooks, ComponentId, StorageType},
+        world::DeferredWorld,
+    },
     prelude::*,
 };
 use bevy_rapier3d::{
@@ -21,8 +24,10 @@ pub struct CasterResult {
 #[reflect(Component)]
 struct ShapeCasterFixed;
 
-#[derive(Reflect)]
+#[derive(Reflect, Component)]
+#[component(on_add = insert_tag_for_fixed)]
 #[reflect(Component)]
+#[require(Transform)]
 pub struct ShapeCaster {
     #[reflect(ignore)]
     pub collider: Collider,
@@ -54,19 +59,11 @@ impl ShapeCaster {
     }
 }
 
-impl Component for ShapeCaster {
-    const STORAGE_TYPE: StorageType = StorageType::Table;
+fn insert_tag_for_fixed(mut world: DeferredWorld<'_>, entity: Entity, _: ComponentId) {
+    let fixed_update = world.get::<ShapeCaster>(entity).unwrap().fixed_update;
 
-    fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_add(|mut world, entity, _component_id| {
-            let fixed_update = world.get::<ShapeCaster>(entity).unwrap().fixed_update;
-
-            if fixed_update {
-                world.commands().entity(entity).insert(ShapeCasterFixed);
-            }
-
-            world.commands().entity(entity).insert(Transform::default());
-        });
+    if fixed_update {
+        world.commands().entity(entity).insert(ShapeCasterFixed);
     }
 }
 

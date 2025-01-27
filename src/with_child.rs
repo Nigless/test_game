@@ -1,19 +1,25 @@
+use std::{marker::PhantomData, thread::spawn};
+
 use bevy::{
     ecs::component::{ComponentHooks, StorageType},
     prelude::*,
 };
 
-pub struct WithChild<T: Bundle + Default> {
+use crate::library::Spawnable;
+
+#[derive(Reflect)]
+#[reflect(Component)]
+pub struct WithChild<T: Spawnable + Send + Sync + 'static> {
     child: Option<T>,
 }
 
-impl<T: Bundle + Default> WithChild<T> {
-    pub fn new(value: T) -> Self {
-        Self { child: Some(value) }
+impl<T: Spawnable + Send + Sync + 'static> WithChild<T> {
+    pub fn new(v: T) -> Self {
+        Self { child: Some(v) }
     }
 }
 
-impl<T: Bundle + Default> Default for WithChild<T> {
+impl<T: Spawnable + Default + Send + Sync + 'static> Default for WithChild<T> {
     fn default() -> Self {
         Self {
             child: Some(default()),
@@ -21,23 +27,24 @@ impl<T: Bundle + Default> Default for WithChild<T> {
     }
 }
 
-impl<T: Bundle + Default> Component for WithChild<T> {
+impl<T: Spawnable + Send + Sync + 'static> Component for WithChild<T> {
     const STORAGE_TYPE: StorageType = StorageType::Table;
 
     fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_add(|mut world, entity, _component_id| {
-            let bundle = world.get_mut::<WithChild<T>>(entity).unwrap().child.take();
+        hooks.on_add(|mut world, entity, _| {
+            let child = world.get_mut::<WithChild<T>>(entity).unwrap().child.take();
 
-            let mut w = world.commands();
-            let mut commands = w.entity(entity);
+            let mut commands = world.commands();
 
-            if let Some(bundle) = bundle {
-                commands.with_children(|parent| {
-                    parent.spawn(bundle);
-                });
-            }
+            commands.entity(entity).remove::<WithChild<T>>();
 
-            commands.remove::<WithChild<T>>();
+            let Some(child) = child else {
+                return;
+            };
+
+            let child_entity = child.spawn(&mut commands);
+
+            commands.entity(entity).add_child(child_entity);
         });
     }
 }

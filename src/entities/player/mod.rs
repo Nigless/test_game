@@ -8,17 +8,18 @@ use crate::liquid::Floating;
 use crate::ray_caster::RayCasterSystems;
 use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
 
+use bevy::animation::{animated_field, AnimationTargetId};
 use bevy_rapier3d::dynamics::Velocity;
 
 use bevy_rapier3d::plugin::{RapierConfiguration, RapierContext};
 use bevy_rapier3d::prelude::{Collider, GravityScale, QueryFilter};
 
 use bevy::prelude::*;
-use components::{Parameters, Status, Unresolved};
+use components::{Parameters, Status};
 use entities::{GhostCamera, Head, RayCast, ShapeCast};
 mod components;
 mod entities;
-pub use entities::GhostBundle;
+pub use entities::Player;
 
 const MAX_SLOPE_ANGLE: f32 = consts::PI / 3.8;
 const HAND_DISTANCE: f32 = 2.0;
@@ -31,7 +32,6 @@ const COLLIDER_CROUCHING_HALF_HEIGHT: f32 = COLLIDER_HALF_HEIGHT * 0.4;
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
 enum GhostSystems {
-    Resolve,
     Update,
     Prepare,
     FixedUpdate,
@@ -43,7 +43,6 @@ impl Plugin for GhostPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Parameters>()
             .register_type::<Status>()
-            .add_systems(First, resolve.in_set(GhostSystems::Resolve))
             .add_systems(
                 PreUpdate,
                 camera
@@ -71,38 +70,6 @@ impl Plugin for GhostPlugin {
                         .in_set(GhostSystems::FixedUpdate),
                 ),
             );
-    }
-}
-
-fn resolve(mut commands: Commands, mut entity_q: Query<Entity, With<Unresolved>>) {
-    for entity in entity_q.iter_mut() {
-        let camera = commands.spawn(GhostCamera::new()).id();
-
-        let ray_cast = commands.spawn(RayCast::new(entity)).id();
-
-        let head = commands
-            .spawn(Head::new(Vec3::Y * COLLIDER_HALF_HEIGHT))
-            .add_child(camera)
-            .add_child(ray_cast)
-            .id();
-
-        let cast_up = commands.spawn(ShapeCast::up(entity)).id();
-        let cast_down = commands.spawn(ShapeCast::down(entity)).id();
-
-        commands
-            .entity(entity)
-            .remove::<Unresolved>()
-            .insert((
-                CameraController::new(camera),
-                Linker::new()
-                    .with_link("head", head)
-                    .with_link("ray_cast", ray_cast)
-                    .with_link("cast_up", cast_up)
-                    .with_link("cast_down", cast_down),
-            ))
-            .add_child(head)
-            .add_child(cast_up)
-            .add_child(cast_down);
     }
 }
 

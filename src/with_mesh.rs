@@ -19,7 +19,7 @@ impl Component for WithMesh {
     const STORAGE_TYPE: StorageType = StorageType::Table;
 
     fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_add(|mut world, entity, _component_id| {
+        hooks.on_add(|mut world, entity, _| {
             let mesh = world.get_mut::<WithMesh>(entity).unwrap().mesh.take();
 
             let mut meshes = world.get_resource_mut::<Assets<Mesh>>().unwrap();

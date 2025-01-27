@@ -19,7 +19,7 @@ impl Component for WithMaterial {
     const STORAGE_TYPE: StorageType = StorageType::Table;
 
     fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_add(|mut world, entity, _component_id| {
+        hooks.on_add(|mut world, entity, _| {
             let material = world
                 .get_mut::<WithMaterial>(entity)
                 .unwrap()
