@@ -12,7 +12,7 @@ use control::{Control, ControlPlugin, Input};
 use despawn::{Despawn, DespawnPlugin};
 use entities::{
     block::BlockBundle,
-    player::{GhostPlugin, Player},
+    player::{Player, PlayerPlugin},
 };
 use levels::test_level::TestLevelBundle;
 use library::Spawnable;
@@ -50,7 +50,7 @@ fn main() {
         .add_plugins((DefaultPlugins, RapierPhysicsPlugin::<NoUserData>::default()))
         .add_plugins((
             ModelPlugin,
-            GhostPlugin,
+            PlayerPlugin,
             CameraControllerPlugin,
             ControlPlugin,
             ShapeCasterPlugin,

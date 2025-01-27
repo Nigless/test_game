@@ -16,7 +16,7 @@ use bevy_rapier3d::prelude::{Collider, GravityScale, QueryFilter};
 
 use bevy::prelude::*;
 use components::{Parameters, Status};
-use entities::{GhostCamera, Head, RayCast, ShapeCast};
+use entities::{Head, PlayerCamera, RayCast, ShapeCast};
 mod components;
 mod entities;
 pub use entities::Player;
@@ -31,35 +31,35 @@ const COLLIDER_HALF_HEIGHT: f32 = 1.0 - COLLIDER_RADIUS;
 const COLLIDER_CROUCHING_HALF_HEIGHT: f32 = COLLIDER_HALF_HEIGHT * 0.4;
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
-enum GhostSystems {
+enum PlayerSystems {
     Update,
     Prepare,
     FixedUpdate,
 }
 
-pub struct GhostPlugin;
+pub struct PlayerPlugin;
 
-impl Plugin for GhostPlugin {
+impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Parameters>()
             .register_type::<Status>()
             .add_systems(
                 PreUpdate,
                 camera
-                    .in_set(GhostSystems::Update)
+                    .in_set(PlayerSystems::Update)
                     .after(ControlSystems)
                     .before(RayCasterSystems),
             )
             .configure_sets(
                 FixedPreUpdate,
-                (GhostSystems::Prepare, GhostSystems::FixedUpdate)
+                (PlayerSystems::Prepare, PlayerSystems::FixedUpdate)
                     .chain()
                     .after(ShapeCasterSystems),
             )
             .add_systems(
                 FixedPreUpdate,
                 (
-                    ground_check.in_set(GhostSystems::Prepare),
+                    ground_check.in_set(PlayerSystems::Prepare),
                     (
                         collider,
                         moving,
@@ -67,7 +67,7 @@ impl Plugin for GhostPlugin {
                         swimming,
                         jumping,
                     )
-                        .in_set(GhostSystems::FixedUpdate),
+                        .in_set(PlayerSystems::FixedUpdate),
                 ),
             );
     }

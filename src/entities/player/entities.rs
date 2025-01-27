@@ -50,7 +50,7 @@ impl Spawnable for Player {
     fn spawn(&self, commands: &mut Commands) -> Entity {
         let player = commands.spawn(Self::bundle()).id();
 
-        let camera = commands.spawn(GhostCamera::bundle()).id();
+        let camera = commands.spawn(PlayerCamera::bundle()).id();
 
         let ray_cast = commands.spawn(RayCast::bundle(player)).id();
 
@@ -80,9 +80,9 @@ impl Spawnable for Player {
     }
 }
 
-pub struct GhostCamera;
+pub struct PlayerCamera;
 
-impl GhostCamera {
+impl PlayerCamera {
     fn bundle() -> impl Bundle {
         (
             Name::new("camera"),
