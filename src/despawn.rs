@@ -13,6 +13,8 @@ use bevy::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::library::Spawnable;
+
 #[derive(Reflect, Serialize, Deserialize, Clone)]
 #[reflect(Component)]
 pub struct Despawn {
@@ -40,6 +42,18 @@ impl Despawn {
     pub fn timeout(mut self, duration: Duration) -> Self {
         self.timeout = Some(duration);
         self
+    }
+
+    pub fn is_time_up(&self) -> bool {
+        let Some(crated_at) = self.crated_at else {
+            return true;
+        };
+
+        let Some(timeout) = self.timeout else {
+            return true;
+        };
+
+        crated_at.elapsed() > timeout
     }
 }
 
@@ -70,10 +84,28 @@ impl Component for Despawn {
     }
 }
 
+#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
+pub struct DespawnSystems;
+
 pub struct DespawnPlugin;
 
 impl Plugin for DespawnPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Despawn>();
+        app.register_type::<Despawn>()
+            .add_systems(FixedPreUpdate, update.in_set(DespawnSystems));
+    }
+}
+
+fn update(mut commands: Commands, entity_q: Query<(Entity, &Despawn)>) {
+    for (entity, despawn) in entity_q.iter() {
+        if !despawn.is_time_up() {
+            return;
+        }
+
+        if despawn.recursive {
+            commands.entity(entity).despawn_recursive();
+            return;
+        }
+        commands.entity(entity).despawn();
     }
 }
