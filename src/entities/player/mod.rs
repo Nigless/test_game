@@ -1,8 +1,10 @@
 use std::f32::consts;
+use std::time::Duration;
 
 use crate::camera_controller::CameraController;
 use crate::control::{Control, ControlSystems, Input};
-use crate::library::move_toward;
+use crate::despawn::Despawn;
+use crate::library::{move_toward, Spawnable};
 use crate::linker::Linker;
 use crate::liquid::Floating;
 use crate::ray_caster::RayCasterSystems;
@@ -20,6 +22,8 @@ use entities::{Head, PlayerCamera, RayCast, ShapeCast};
 mod components;
 mod entities;
 pub use entities::Player;
+
+use super::fireball::Fireball;
 
 const MAX_SLOPE_ANGLE: f32 = consts::PI / 3.8;
 const HAND_DISTANCE: f32 = 2.0;
@@ -45,7 +49,7 @@ impl Plugin for PlayerPlugin {
             .register_type::<Status>()
             .add_systems(
                 PreUpdate,
-                camera
+                (camera, fireball)
                     .in_set(PlayerSystems::Update)
                     .after(ControlSystems)
                     .before(RayCasterSystems),
@@ -70,6 +74,31 @@ impl Plugin for PlayerPlugin {
                         .in_set(PlayerSystems::FixedUpdate),
                 ),
             );
+    }
+}
+
+fn fireball(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    entity_q: Query<&Linker>,
+    camera_q: Query<&GlobalTransform>,
+) {
+    if !keyboard.just_pressed(KeyCode::KeyE) {
+        return;
+    }
+
+    for linker in entity_q.iter() {
+        let transform = camera_q.get(*linker.get("head").unwrap()).unwrap();
+
+        let direction = transform.rotation() * Vec3::NEG_Z;
+
+        let position = transform.translation() + direction;
+
+        Fireball.spawn(&mut commands).insert((
+            Transform::from_translation(position),
+            Velocity::linear(direction * 10.0),
+            Despawn::after(Duration::from_secs(10)),
+        ));
     }
 }
 

@@ -6,7 +6,7 @@ use bevy::{
     prelude::*,
 };
 use bevy_rapier3d::{
-    plugin::RapierContext,
+    plugin::{RapierConfiguration, RapierContext},
     prelude::{Group, QueryFilter, SolverGroups},
 };
 

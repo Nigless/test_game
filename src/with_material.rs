@@ -3,6 +3,7 @@ use bevy::{
     prelude::*,
 };
 
+#[derive(Clone)]
 pub struct WithMaterial {
     material: Option<StandardMaterial>,
 }

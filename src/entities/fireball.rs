@@ -1,9 +1,20 @@
 use std::time::Duration;
 
 use bevy::{color::palettes::css::ORANGE, ecs::entity, pbr::NotShadowCaster, prelude::*};
-use bevy_rapier3d::prelude::{ActiveEvents, Collider, CollisionEvent, Sensor};
+use bevy_rapier3d::prelude::{
+    ActiveEvents, Collider, CollisionEvent, GravityScale, LockedAxes, RigidBody, Sensor,
+};
 
-use crate::{billboard::BillboardMaterial, despawn::Despawn, library::Spawnable};
+use crate::{
+    billboard::BillboardMaterial, despawn::Despawn, explosion::Explosion, library::Spawnable,
+    AppSystems,
+};
+
+#[derive(Resource, PartialEq, Clone)]
+struct InnerAssets {
+    pub material: Handle<BillboardMaterial>,
+    pub mesh: Handle<Mesh>,
+}
 
 #[derive(Component, Reflect, Clone)]
 #[reflect(Component)]
@@ -11,36 +22,22 @@ use crate::{billboard::BillboardMaterial, despawn::Despawn, library::Spawnable};
 pub struct Fireball;
 
 impl Spawnable for Fireball {
-    fn spawn(&self, commands: &mut Commands) -> Entity {
-        commands
+    fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
+        let entity = commands
             .spawn(self.clone())
             .queue(|entity: Entity, world: &mut World| {
-                let texture_handle = {
-                    let asset_server = world.get_resource::<AssetServer>().unwrap();
-                    asset_server.load("fireball/texture.png")
-                };
-
-                let quad_handle = {
-                    let mut meshes = world.get_resource_mut::<Assets<Mesh>>().unwrap();
-                    meshes.add(Rectangle::new(1.0, 1.0))
-                };
-
-                let material_handle: Handle<BillboardMaterial> = {
-                    let mut materials = world
-                        .get_resource_mut::<Assets<BillboardMaterial>>()
-                        .unwrap();
-
-                    materials.add(BillboardMaterial::new(texture_handle.clone()))
-                };
+                let assets = world.get_resource::<InnerAssets>().cloned().unwrap();
 
                 let mut commands = world.commands();
 
                 commands.entity(entity).insert((
                     Name::new("fireball"),
-                    Mesh3d(quad_handle.clone()),
-                    MeshMaterial3d(material_handle),
+                    LockedAxes::ROTATION_LOCKED,
+                    Mesh3d(assets.mesh.clone()),
+                    MeshMaterial3d(assets.material.clone()),
                     NotShadowCaster,
-                    Sensor,
+                    RigidBody::Dynamic,
+                    GravityScale(0.0),
                     Collider::ball(0.3),
                     ActiveEvents::COLLISION_EVENTS,
                     PointLight {
@@ -51,7 +48,9 @@ impl Spawnable for Fireball {
                     },
                 ));
             })
-            .id()
+            .id();
+
+        commands.entity(entity)
     }
 }
 
@@ -60,8 +59,22 @@ pub struct FireballPlugin;
 impl Plugin for FireballPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<Despawn>()
-            .add_systems(FixedPreUpdate, update);
+            .add_systems(FixedPreUpdate, update)
+            .add_systems(PreStartup, load);
     }
+}
+
+fn load(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<BillboardMaterial>>,
+) {
+    let texture = asset_server.load("fireball/texture.png");
+    let mesh = meshes.add(Rectangle::new(1.0, 1.0));
+    let material = materials.add(BillboardMaterial::new(texture.clone()));
+
+    commands.insert_resource(InnerAssets { mesh, material });
 }
 
 fn update(
@@ -81,6 +94,14 @@ fn update(
         } else {
             continue;
         };
+
+        let Ok((_, transform)) = fireball_q.get(*fireball) else {
+            continue;
+        };
+
+        Explosion::new(10.0)
+            .spawn(&mut commands)
+            .insert(transform.clone());
 
         commands.entity(*fireball).despawn_recursive();
     }

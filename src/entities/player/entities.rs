@@ -47,36 +47,41 @@ impl Player {
 }
 
 impl Spawnable for Player {
-    fn spawn(&self, commands: &mut Commands) -> Entity {
+    fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
         let player = commands.spawn(Self::bundle()).id();
-
-        let camera = commands.spawn(PlayerCamera::bundle()).id();
-
-        let ray_cast = commands.spawn(RayCast::bundle(player)).id();
 
         let head = commands
             .spawn(Head::bundle(Vec3::Y * COLLIDER_HALF_HEIGHT))
-            .add_child(camera)
-            .add_child(ray_cast)
+            .set_parent(player)
             .id();
 
-        let cast_up = commands.spawn(ShapeCast::up(player).bundle()).id();
-        let cast_down = commands.spawn(ShapeCast::down(player).bundle()).id();
+        let camera = commands.spawn(PlayerCamera::bundle()).set_parent(head).id();
 
-        commands
-            .entity(player)
-            .insert((
-                CameraController::new(camera),
-                Linker::new()
-                    .with_link("head", head)
-                    .with_link("ray_cast", ray_cast)
-                    .with_link("cast_up", cast_up)
-                    .with_link("cast_down", cast_down),
-            ))
-            .add_child(head)
-            .add_child(cast_up)
-            .add_child(cast_down)
-            .id()
+        let ray_cast = commands
+            .spawn(RayCast::bundle(player))
+            .set_parent(head)
+            .id();
+
+        let cast_up = commands
+            .spawn(ShapeCast::up(player).bundle())
+            .set_parent(player)
+            .id();
+
+        let cast_down = commands
+            .spawn(ShapeCast::down(player).bundle())
+            .set_parent(player)
+            .id();
+
+        commands.entity(player).insert((
+            CameraController::new(camera),
+            Linker::new()
+                .with_link("head", head)
+                .with_link("ray_cast", ray_cast)
+                .with_link("cast_up", cast_up)
+                .with_link("cast_down", cast_down),
+        ));
+
+        commands.entity(player)
     }
 }
 

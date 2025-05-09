@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::*;
 
-use crate::{with_material::WithMaterial, with_mesh::WithMesh};
+use crate::{library::Spawnable, with_material::WithMaterial, with_mesh::WithMesh};
 
-#[derive(Bundle)]
+#[derive(Bundle, Clone)]
 pub struct BlockBundle {
     name: Name,
     mesh: WithMesh,
@@ -11,6 +11,8 @@ pub struct BlockBundle {
     collider: Collider,
     body: RigidBody,
     collider_mass_properties: ColliderMassProperties,
+    velocity: Velocity,
+    transform: Transform,
 }
 
 impl Default for BlockBundle {
@@ -21,7 +23,9 @@ impl Default for BlockBundle {
             material: WithMaterial::new(Color::srgb_u8(255, 255, 255)),
             collider: Collider::cuboid(0.5, 0.5, 0.5),
             body: RigidBody::Dynamic,
-            collider_mass_properties: ColliderMassProperties::Mass(500.0),
+            collider_mass_properties: ColliderMassProperties::Mass(200.0),
+            velocity: Velocity::default(),
+            transform: Transform::default(),
         }
     }
 }
@@ -39,5 +43,16 @@ impl BlockBundle {
     pub fn with_mass(mut self, mass: f32) -> Self {
         self.collider_mass_properties = ColliderMassProperties::Mass(mass);
         self
+    }
+
+    pub fn with_transform(mut self, transform: Transform) -> Self {
+        self.transform = transform;
+        self
+    }
+}
+
+impl Spawnable for BlockBundle {
+    fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
+        commands.spawn(self.clone())
     }
 }

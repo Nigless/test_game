@@ -1,6 +1,5 @@
 use bevy::{prelude::Component, reflect::Reflect};
 
-use crate::with_child::WithChild;
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{GravityScale, Velocity};
 

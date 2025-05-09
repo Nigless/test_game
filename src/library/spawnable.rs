@@ -1,5 +1,5 @@
 use bevy::prelude::{Bundle, Commands, Entity, EntityCommands};
 
 pub trait Spawnable {
-    fn spawn(&self, commands: &mut Commands) -> Entity;
+    fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a>;
 }

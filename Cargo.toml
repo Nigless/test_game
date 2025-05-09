@@ -4,14 +4,19 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.15.*", features = ["serialize", "bevy_dev_tools"] }
+bevy = { version = "0.15.*", features = [
+   "serialize",
+   "bevy_dev_tools",
+   "trace_tracy",
+] }
 bevy-inspector-egui = "0.28.*"
 bevy_rapier3d = "0.28.*"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 serde = "1.0.217"
 serde_json = "1.0.*"
-bevy_hanabi = "0.14.*"
+bevy_hanabi = "0.15.*"
+tracy-client = "0.18.*"
 
 [profile.dev.package."*"]
 opt-level = 3

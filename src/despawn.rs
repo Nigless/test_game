@@ -15,18 +15,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::library::Spawnable;
 
-#[derive(Reflect, Serialize, Deserialize, Clone)]
+#[derive(Reflect, Clone, Debug)]
 #[reflect(Component)]
 pub struct Despawn {
     recursive: bool,
     timeout: Option<Duration>,
-
-    #[serde(skip_deserializing, skip_serializing)]
     crated_at: Option<Instant>,
 }
 
 impl Despawn {
-    pub fn new() -> Self {
+    pub fn now() -> Self {
         Self {
             recursive: false,
             timeout: None,
@@ -34,13 +32,16 @@ impl Despawn {
         }
     }
 
-    pub fn recursive(mut self) -> Self {
-        self.recursive = true;
-        self
+    pub fn after(duration: Duration) -> Self {
+        Self {
+            recursive: false,
+            timeout: Some(duration),
+            crated_at: None,
+        }
     }
 
-    pub fn timeout(mut self, duration: Duration) -> Self {
-        self.timeout = Some(duration);
+    pub fn recursive(mut self) -> Self {
+        self.recursive = true;
         self
     }
 
@@ -99,13 +100,14 @@ impl Plugin for DespawnPlugin {
 fn update(mut commands: Commands, entity_q: Query<(Entity, &Despawn)>) {
     for (entity, despawn) in entity_q.iter() {
         if !despawn.is_time_up() {
-            return;
+            continue;
         }
 
         if despawn.recursive {
             commands.entity(entity).despawn_recursive();
-            return;
+            continue;
         }
+
         commands.entity(entity).despawn();
     }
 }
