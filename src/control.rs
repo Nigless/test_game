@@ -17,6 +17,8 @@ pub struct Bindings {
     pub move_left: KeyCode,
     pub move_right: KeyCode,
     pub move_backward: KeyCode,
+    pub swim_up: KeyCode,
+    pub swim_down: KeyCode,
     pub jump: KeyCode,
     pub crouch: KeyCode,
     pub run: KeyCode,
@@ -38,6 +40,8 @@ impl Default for Bindings {
             pause: KeyCode::Escape,
             switch_full_screen: KeyCode::F11,
             mouse_sensitivity: 0.002,
+            swim_up: KeyCode::Space,
+            swim_down: KeyCode::ControlLeft,
         }
     }
 }
@@ -46,12 +50,42 @@ impl Default for Bindings {
 #[reflect(Resource)]
 pub struct Input {
     pub moving: Vec2,
-    pub looking_around: Vec2,
-    pub jumping: bool,
+    looking: Vec2,
+    jumping: bool,
     pub running: bool,
+    pub swimming_up: bool,
+    pub swimming_down: bool,
     pub crouching: bool,
     pub pausing: bool,
-    pub full_screen_switching: bool,
+    full_screen_switching: bool,
+}
+
+impl Input {
+    pub fn jumping(&mut self) -> bool {
+        if self.jumping {
+            self.jumping = false;
+            return true;
+        }
+
+        false
+    }
+
+    pub fn full_screen_switching(&mut self) -> bool {
+        if self.full_screen_switching {
+            self.full_screen_switching = false;
+            return true;
+        }
+
+        false
+    }
+
+    pub fn looking(&mut self) -> Vec2 {
+        let result = self.looking;
+
+        self.looking = Vec2::ZERO;
+
+        result
+    }
 }
 
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
@@ -79,37 +113,35 @@ fn update(
     controls: Res<Bindings>,
     mut input: ResMut<Input>,
 ) {
-    let mut result = Input::default();
-
     for event in mouse.read().into_iter() {
-        result.looking_around +=
-            Vec2::new(-event.delta.x, -event.delta.y) * controls.mouse_sensitivity;
+        input.looking += Vec2::new(-event.delta.x, -event.delta.y) * controls.mouse_sensitivity;
     }
 
+    input.moving = Vec2::ZERO;
+
     if keyboard.pressed(controls.move_left) {
-        result.moving += Vec2::new(-1.0, 0.0);
+        input.moving += Vec2::new(-1.0, 0.0);
     }
 
     if keyboard.pressed(controls.move_right) {
-        result.moving += Vec2::new(1.0, 0.0);
+        input.moving += Vec2::new(1.0, 0.0);
     }
 
     if keyboard.pressed(controls.move_forward) {
-        result.moving += Vec2::new(0.0, -1.0);
+        input.moving += Vec2::new(0.0, -1.0);
     }
 
     if keyboard.pressed(controls.move_backward) {
-        result.moving += Vec2::new(0.0, 1.0);
+        input.moving += Vec2::new(0.0, 1.0);
     }
 
-    result.jumping = keyboard.just_pressed(controls.jump);
-    result.full_screen_switching = keyboard.just_pressed(controls.switch_full_screen);
-    result.running = keyboard.pressed(controls.run);
-    result.crouching = keyboard.pressed(controls.crouch);
+    input.jumping = input.jumping || keyboard.just_pressed(controls.jump);
+    input.full_screen_switching =
+        input.full_screen_switching || keyboard.just_pressed(controls.switch_full_screen);
+    input.running = keyboard.pressed(controls.run);
+    input.crouching = keyboard.pressed(controls.crouch);
+    input.swimming_up = keyboard.pressed(controls.swim_up);
+    input.swimming_down = keyboard.pressed(controls.swim_down);
 
-    result.pausing = keyboard.just_pressed(controls.pause);
-
-    if *input != result {
-        *input = result;
-    }
+    input.pausing = keyboard.just_pressed(controls.pause);
 }

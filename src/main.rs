@@ -1,141 +1,136 @@
-use std::f32::consts;
+use std::{env, time::Duration};
 
 use bevy::{
+    color::palettes::css::RED,
+    dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
+    pbr::NotShadowCaster,
     prelude::*,
-    render::render_resource::{AsBindGroup, ShaderRef},
+    render::primitives::Aabb,
     window::WindowMode,
 };
+mod billboard;
 mod camera_controller;
 mod control;
 mod entities;
 mod model;
+use bevy_hanabi::HanabiPlugin;
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
+use billboard::BillboardPlugin;
 use camera_controller::{CameraControllerPlugin, Spectate};
-use character_body::CharacterBodyPlugin;
 use control::{Control, ControlPlugin, Input};
-use entities::ghost::{GhostBundle, GhostPlugin};
+use despawn::{Despawn, DespawnPlugin};
+use entities::{
+    block::BlockBundle,
+    fireball::{Fireball, FireballPlugin},
+    player::{Player, PlayerPlugin},
+};
+use explosion::ExplosionPlugin;
+use levels::test_level::TestLevelBundle;
+use library::Spawnable;
 use linker::LinkerPlugin;
-use model::{Model, ModelPlugin};
+use model::ModelPlugin;
+use random::RandomPlugin;
+use ray_caster::RayCasterPlugin;
 use shape_caster::ShapeCasterPlugin;
-mod character_body;
-mod lib;
+use throttle::ThrottlePlugin;
+use tracy_client::Client;
+use with_material::WithMaterial;
+use with_mesh::WithMesh;
+mod despawn;
+mod explosion;
+mod levels;
+mod library;
 mod linker;
+mod random;
+mod ray_caster;
 mod shape_caster;
+mod throttle;
+mod with_material;
+mod with_mesh;
+
+#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
+pub enum AppSystems {
+    Startup,
+    Update,
+}
 
 fn main() {
-    App::new()
+    let _client = Client::start();
+
+    let mut app = App::new();
+    let mut app = app
         .add_plugins((
-            DefaultPlugins,
+            DefaultPlugins.set(ImagePlugin::default_nearest()),
             RapierPhysicsPlugin::<NoUserData>::default(),
-            UiMaterialPlugin::<CrosshairMaterial>::default(),
+            HanabiPlugin,
         ))
         .add_plugins((
             ModelPlugin,
-            GhostPlugin,
+            PlayerPlugin,
+            FireballPlugin,
             CameraControllerPlugin,
             ControlPlugin,
-            CharacterBodyPlugin,
             ShapeCasterPlugin,
             LinkerPlugin,
+            ThrottlePlugin,
+            RayCasterPlugin,
+            RandomPlugin::default(),
+            DespawnPlugin,
+            BillboardPlugin,
+            ExplosionPlugin,
         ))
         .insert_resource(AmbientLight {
-            color: Color::rgb(1.0, 1.0, 1.0),
+            color: Color::WHITE,
             brightness: 100.0,
         })
-        .insert_resource(ClearColor(Color::rgb(0.8, 0.9, 1.0)))
-        .add_systems(PreStartup, startup)
-        .add_systems(PreUpdate, screen_mode_update)
-        .run();
-}
+        .insert_resource(ClearColor(Color::srgb(0.8, 0.9, 1.0)))
+        .add_systems(Startup, startup.in_set(AppSystems::Startup))
+        .add_systems(PreUpdate, screen_mode_update.in_set(AppSystems::Update));
 
-#[derive(AsBindGroup, Asset, TypePath, Debug, Clone)]
-struct CrosshairMaterial {}
-
-impl UiMaterial for CrosshairMaterial {
-    fn fragment_shader() -> ShaderRef {
-        "crosshair.wgsl".into()
+    #[cfg(debug_assertions)]
+    {
+        app = app.add_plugins((
+            RapierDebugRenderPlugin::default(),
+            WorldInspectorPlugin::default(),
+            FpsOverlayPlugin {
+                config: FpsOverlayConfig {
+                    text_color: RED.into(),
+                    text_config: TextFont {
+                        font_size: 14.0,
+                        ..default()
+                    },
+                    ..default()
+                },
+            },
+        ));
     }
+
+    app.run();
 }
 
-fn screen_mode_update(input: Res<Input>, mut window_q: Query<&mut Window>) {
-    let mut window = window_q.get_single_mut().unwrap();
-
-    if window.mode == WindowMode::Fullscreen {
+fn screen_mode_update(mut input: ResMut<Input>, mut window: Single<&mut Window>) {
+    if let WindowMode::BorderlessFullscreen(_) = window.mode {
         let x = window.resolution.width() / 2.0;
         let y = window.resolution.height() / 2.0;
         window.set_cursor_position(Some(Vec2::new(x, y)));
     }
 
-    if !input.full_screen_switching {
+    if !input.full_screen_switching() {
         return;
     }
 
-    if window.mode == WindowMode::Fullscreen {
-        window.cursor.visible = true;
+    if let WindowMode::BorderlessFullscreen(_) = window.mode {
+        window.cursor_options.visible = true;
         window.mode = WindowMode::Windowed;
 
         return;
     }
 
-    window.cursor.visible = false;
-    window.mode = WindowMode::Fullscreen
+    window.cursor_options.visible = false;
+    window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Current)
 }
 
-fn startup(mut commands: Commands, mut crosshair_materials: ResMut<Assets<CrosshairMaterial>>) {
-    commands
-        .spawn(NodeBundle {
-            style: Style {
-                top: Val::Percent(50.0),
-                left: Val::Percent(50.0),
-                ..default()
-            },
-            ..default()
-        })
-        .with_children(|commands| {
-            let size = 1.0;
-
-            commands.spawn(MaterialNodeBundle {
-                style: Style {
-                    position_type: PositionType::Absolute,
-                    width: Val::VMin(size),
-                    height: Val::VMin(size),
-                    top: Val::VMin(size / -2.0),
-                    left: Val::VMin(size / -2.0),
-                    ..default()
-                },
-                material: crosshair_materials.add(CrosshairMaterial {}),
-                ..default()
-            });
-        });
-
-    commands.spawn((
-        Model::new("test_scene.glb"),
-        RigidBody::Fixed,
-        TransformBundle::default(),
-    ));
-
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight {
-            illuminance: 3000.0,
-            shadows_enabled: true,
-            color: Color::rgb(1.0, 1.0, 1.0),
-            ..default()
-        },
-        transform: Transform {
-            rotation: Quat::from_rotation_y(consts::PI * -0.1)
-                * Quat::from_rotation_x(consts::PI * -0.6),
-            ..default()
-        },
-        ..default()
-    });
-
-    commands
-        .spawn(GhostBundle::new())
-        .insert(Transform::from_xyz(0.0, 3.0, 0.0))
-        .insert(Spectate)
-        .insert(Control);
-
-    commands.spawn(GhostBundle::new()).insert(
-        Transform::from_xyz(4.0, 2.2, 5.0).with_rotation(Quat::from_rotation_y(consts::PI)),
-    );
+fn startup(mut commands: Commands) {
+    TestLevelBundle.spawn(&mut commands);
 }

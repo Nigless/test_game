@@ -1,10 +1,22 @@
 use bevy::{
-    gltf::{Gltf, GltfMesh, GltfNode},
+    ecs::{
+        component::{ComponentHooks, StorageType},
+        reflect::ReflectCommandExt,
+    },
     prelude::*,
+    ptr::OwningPtr,
+    reflect::{
+        serde::{ReflectDeserializer, TypedReflectDeserializer},
+        TypeData, TypeRegistration,
+    },
 };
-use bevy_rapier3d::geometry::{Collider, ComputedColliderShape};
+use bevy_rapier3d::{
+    geometry::{Collider, ComputedColliderShape},
+    prelude::{TriMeshFlags, VHACDParameters},
+};
+use serde::de::DeserializeSeed;
+use serde_json::{Deserializer, Value};
 
-#[derive(Component)]
 pub struct Model {
     pub src: String,
 }
@@ -17,6 +29,28 @@ impl Model {
     }
 }
 
+impl Component for Model {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_add(|mut world, entity, _| {
+            let src = world.get_mut::<Model>(entity).unwrap().src.clone();
+
+            world.commands().entity(entity).remove::<Model>();
+
+            let server = world.get_resource::<AssetServer>().unwrap();
+
+            let scene_root = SceneRoot(server.load(GltfAssetLabel::Scene(0).from_asset(src)));
+
+            world
+                .commands()
+                .entity(entity)
+                .remove::<Model>()
+                .insert(scene_root);
+        });
+    }
+}
+
 #[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
 pub enum ModelSystems {
     Resolve,
@@ -26,122 +60,67 @@ pub struct ModelPlugin;
 
 impl Plugin for ModelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(First, (load, resolve).in_set(ModelSystems::Resolve));
+        app.add_systems(First, resolve.in_set(ModelSystems::Resolve));
     }
-}
-
-fn load(server: Res<AssetServer>, mut commands: Commands, models_q: Query<(Entity, &Model)>) {
-    for (entity, model) in models_q.iter() {
-        let src = model.src.clone();
-
-        commands
-            .entity(entity)
-            .remove::<Model>()
-            .insert(server.load::<Gltf>(src));
-    }
-}
-
-fn resolve_node(
-    parent: &Entity,
-    commands: &mut Commands,
-    gltf_meshes_res: &mut ResMut<Assets<GltfMesh>>,
-    meshes_res: &mut ResMut<Assets<Mesh>>,
-    node: &GltfNode,
-) {
-    let mut is_collider = false;
-
-    node.extras.as_ref().map(|extras| {
-        if extras.value == "{\"Collider\":true}" {
-            is_collider = true
-        }
-    });
-
-    let mut entity = *parent;
-
-    if !is_collider {
-        entity = commands
-            .spawn((Name::new("node"), PbrBundle::default()))
-            .insert(node.transform.clone())
-            .id();
-
-        commands.entity(*parent).add_child(entity);
-    }
-
-    node.mesh
-        .as_ref()
-        .map_or(None, |mesh| gltf_meshes_res.get_mut(mesh))
-        .map(|mesh| {
-            if mesh.primitives.len() == 1 {
-                let primitive = &mesh.primitives[0];
-
-                if is_collider {
-                    meshes_res
-                        .get(&primitive.mesh)
-                        .map_or(None, |mesh| {
-                            Collider::from_bevy_mesh(mesh, &ComputedColliderShape::default())
-                        })
-                        .map(|collider| {
-                            commands.entity(entity).insert(collider);
-                        });
-
-                    return;
-                }
-
-                let mut entity_commands = commands.entity(entity);
-                entity_commands.insert(primitive.mesh.clone());
-
-                primitive
-                    .material
-                    .as_ref()
-                    .map(|material| entity_commands.insert(material.clone()));
-                return;
-            };
-
-            if is_collider {
-                panic!("there more than one primitive")
-            }
-
-            for primitive in &mesh.primitives {
-                let mut primitive_commands =
-                    commands.spawn((Name::new("primitive"), primitive.mesh.clone()));
-
-                primitive
-                    .material
-                    .as_ref()
-                    .map(|material| primitive_commands.insert(material.clone()));
-                let primitive = primitive_commands.id();
-                commands.entity(entity).add_child(primitive);
-            }
-        });
-
-    node.children
-        .iter()
-        .for_each(|node| resolve_node(&entity, commands, gltf_meshes_res, meshes_res, node));
 }
 
 fn resolve(
-    gltf_res: Res<Assets<Gltf>>,
-    nodes_res: Res<Assets<GltfNode>>,
-    mut gltf_meshes_res: ResMut<Assets<GltfMesh>>,
-    mut meshes_res: ResMut<Assets<Mesh>>,
+    meshes_res: Res<Assets<Mesh>>,
+    types_res: Res<AppTypeRegistry>,
     mut commands: Commands,
-    models_q: Query<(Entity, &Handle<Gltf>)>,
+    models_q: Query<(Entity, &Children, &GltfExtras)>,
+    meshes_q: Query<&Mesh3d>,
 ) {
-    for (entity, gltf) in models_q.iter() {
-        gltf_res.get(gltf).map(|gltf| {
-            gltf.named_nodes.get("model").map(|node| {
-                nodes_res.get(node).map(|node| {
-                    resolve_node(
-                        &entity,
-                        &mut commands,
-                        &mut gltf_meshes_res,
-                        &mut meshes_res,
-                        node,
-                    )
-                });
-            });
+    for (entity, children, extras) in models_q.iter() {
+        commands.entity(entity).remove::<GltfExtras>();
 
-            commands.entity(entity).remove::<Handle<Gltf>>();
-        });
+        let Ok(json_value) = serde_json::from_str::<Value>(&extras.value) else {
+            continue;
+        };
+
+        let Some(extras) = json_value.as_object() else {
+            continue;
+        };
+
+        let types = types_res.read();
+
+        for (component_name, value) in extras.clone() {
+            let Some(component_type) = types.get_with_type_path(&component_name).cloned() else {
+                continue;
+            };
+
+            let Some(params) = value.as_str() else {
+                continue;
+            };
+
+            let reflect_deserializer = TypedReflectDeserializer::new(&component_type, &types);
+
+            let mut deserializer = Deserializer::from_str(params);
+
+            let value = reflect_deserializer.deserialize(&mut deserializer).unwrap();
+
+            commands.entity(entity).insert_reflect(value);
+        }
+
+        let Some(convex_hull) = extras.get("collider").and_then(|v| v.as_bool()) else {
+            continue;
+        };
+
+        let mesh = meshes_q.get(children[0]).unwrap();
+
+        let mesh = meshes_res.get(mesh).unwrap();
+
+        commands.entity(children[0]).try_despawn();
+
+        let mut shape = ComputedColliderShape::TriMesh(TriMeshFlags::all());
+
+        if convex_hull {
+            shape = ComputedColliderShape::ConvexHull
+        }
+
+        commands
+            .entity(entity)
+            .try_insert(Collider::from_bevy_mesh(mesh, &shape).unwrap())
+            .remove::<Children>();
     }
 }

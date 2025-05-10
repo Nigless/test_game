@@ -31,7 +31,7 @@ impl Plugin for CameraControllerPlugin {
     }
 }
 
-type CameraQuery<'world, 'state, 'q> = Query<'world, 'state, &'q mut Camera, With<Camera3d>>;
+type CameraQuery<'world, 'state, 'q> = Query<'world, 'state, &'q mut Camera>;
 
 fn clean_up(removed: RemovedComponents<Spectate>, mut camera_q: CameraQuery) {
     if removed.is_empty() {
