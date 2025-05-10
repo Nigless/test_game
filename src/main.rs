@@ -29,7 +29,6 @@ use explosion::ExplosionPlugin;
 use levels::test_level::TestLevelBundle;
 use library::Spawnable;
 use linker::LinkerPlugin;
-use liquid::{Liquid, LiquidPlugin};
 use model::ModelPlugin;
 use random::RandomPlugin;
 use ray_caster::RayCasterPlugin;
@@ -43,12 +42,10 @@ mod explosion;
 mod levels;
 mod library;
 mod linker;
-mod liquid;
 mod random;
 mod ray_caster;
 mod shape_caster;
 mod throttle;
-mod with_entity;
 mod with_material;
 mod with_mesh;
 
@@ -78,7 +75,6 @@ fn main() {
             LinkerPlugin,
             ThrottlePlugin,
             RayCasterPlugin,
-            LiquidPlugin,
             RandomPlugin::default(),
             DespawnPlugin,
             BillboardPlugin,

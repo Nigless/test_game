@@ -44,11 +44,6 @@ impl BlockBundle {
         self.collider_mass_properties = ColliderMassProperties::Mass(mass);
         self
     }
-
-    pub fn with_transform(mut self, transform: Transform) -> Self {
-        self.transform = transform;
-        self
-    }
 }
 
 impl Spawnable for BlockBundle {

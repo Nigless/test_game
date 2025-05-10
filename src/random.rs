@@ -8,7 +8,7 @@ use bevy::{
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 
-#[derive(Resource, PartialEq)]
+#[derive(Resource, PartialEq, Clone)]
 pub struct Random {
     pub rand: ChaCha8Rng,
 }
@@ -51,6 +51,6 @@ impl RandomPlugin {
 
 impl Plugin for RandomPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Random::default());
+        app.insert_resource(self.random.clone().unwrap_or_default());
     }
 }

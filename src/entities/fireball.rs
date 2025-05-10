@@ -11,7 +11,7 @@ use crate::{
 };
 
 #[derive(Resource, PartialEq, Clone)]
-struct InnerAssets {
+struct FireballAssets {
     pub material: Handle<BillboardMaterial>,
     pub mesh: Handle<Mesh>,
 }
@@ -26,7 +26,7 @@ impl Spawnable for Fireball {
         let entity = commands
             .spawn(self.clone())
             .queue(|entity: Entity, world: &mut World| {
-                let assets = world.get_resource::<InnerAssets>().cloned().unwrap();
+                let assets = world.get_resource::<FireballAssets>().cloned().unwrap();
 
                 let mut commands = world.commands();
 
@@ -74,7 +74,7 @@ fn load(
     let mesh = meshes.add(Rectangle::new(1.0, 1.0));
     let material = materials.add(BillboardMaterial::new(texture.clone()));
 
-    commands.insert_resource(InnerAssets { mesh, material });
+    commands.insert_resource(FireballAssets { mesh, material });
 }
 
 fn update(

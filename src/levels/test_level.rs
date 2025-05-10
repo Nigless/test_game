@@ -6,10 +6,9 @@ use bevy_rapier3d::prelude::{RigidBody, Velocity};
 use crate::{
     camera_controller::Spectate,
     control::Control,
-    entities::{block::BlockBundle, fireball::Fireball, player::Player},
+    entities::{block::BlockBundle, fireball::Fireball, player::Player, traffic_cone::TrafficCone},
     library::Spawnable,
     model::Model,
-    with_entity::WithEntity,
 };
 
 pub struct TestLevelBundle;
@@ -51,35 +50,42 @@ impl Spawnable for TestLevelBundle {
 
         Fireball
             .spawn(commands)
-            .insert((Transform::from_xyz(0.0, 1.0, 3.0),))
-            .insert(Velocity::linear(Vec3::X))
+            .insert((
+                Transform::from_xyz(0.0, 1.0, 3.0),
+                Velocity::linear(Vec3::X),
+            ))
             .set_parent(entity);
 
         Fireball
             .spawn(commands)
-            .insert((Transform::from_xyz(0.0, 1.0, -3.0),))
+            .insert(Transform::from_xyz(0.0, 1.0, -3.0))
             .set_parent(entity);
 
         BlockBundle::default()
-            .with_transform(Transform::from_xyz(-4.0, 3.0, 24.0))
             .spawn(commands)
+            .insert(Transform::from_xyz(-4.0, 3.0, 24.0))
             .set_parent(entity);
 
         BlockBundle::default()
-            .with_transform(Transform::from_xyz(4.0, 3.0, 16.0))
             .spawn(commands)
+            .insert(Transform::from_xyz(4.0, 3.0, 16.0))
             .set_parent(entity);
 
         BlockBundle::new(1.0, 0.5, 4.0)
-            .with_transform(Transform::from_xyz(4.0, 3.0, 24.0))
             .with_mass(100.0)
             .spawn(commands)
+            .insert(Transform::from_xyz(4.0, 3.0, 24.0))
             .set_parent(entity);
 
         BlockBundle::new(0.5, 0.5, 0.5)
             .with_mass(25.0 / 2.0)
-            .with_transform(Transform::from_xyz(0.0, 2.0, 20.0))
             .spawn(commands)
+            .insert(Transform::from_xyz(0.0, 2.0, 20.0))
+            .set_parent(entity);
+
+        TrafficCone
+            .spawn(commands)
+            .insert(Transform::from_xyz(0.0, 1.0, 0.0))
             .set_parent(entity);
 
         commands.entity(entity)
