@@ -1,6 +1,6 @@
 use bevy::{
     ecs::{
-        component::{ComponentHooks, StorageType},
+        component::{self, ComponentHooks, StorageType},
         reflect::ReflectCommandExt,
     },
     prelude::*,
@@ -14,8 +14,53 @@ use bevy_rapier3d::{
     geometry::{Collider, ComputedColliderShape},
     prelude::{TriMeshFlags, VHACDParameters},
 };
-use serde::de::DeserializeSeed;
+use serde::{de::DeserializeSeed, Deserialize, Serialize};
 use serde_json::{Deserializer, Value};
+
+#[derive(Reflect, Serialize, Deserialize)]
+#[reflect(Component)]
+pub struct ResolveCollider {
+    convex_hull: bool,
+}
+
+impl Component for ResolveCollider {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_add(|mut world, entity, _| {
+            let (Some(convex_hull), Some(child)) = (
+                world.get::<ResolveCollider>(entity).map(|c| c.convex_hull),
+                world.get::<Children>(entity).map(|c| c[0]),
+            ) else {
+                return;
+            };
+
+            let mut shape = ComputedColliderShape::TriMesh(TriMeshFlags::all());
+
+            if convex_hull {
+                shape = ComputedColliderShape::ConvexHull
+            }
+
+            world.commands().entity(child).try_despawn_recursive();
+
+            let (Some(mesh), Some(meshes)) = (
+                world.get::<Mesh3d>(child),
+                world.get_resource::<Assets<Mesh>>(),
+            ) else {
+                return;
+            };
+
+            let mesh = meshes.get(mesh).unwrap().clone();
+
+            world
+                .commands()
+                .entity(entity)
+                .try_insert(Collider::from_bevy_mesh(&mesh, &shape).unwrap())
+                .remove::<Children>()
+                .remove::<ResolveCollider>();
+        });
+    }
+}
 
 pub struct Model {
     pub src: String,
@@ -60,18 +105,17 @@ pub struct ModelPlugin;
 
 impl Plugin for ModelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(First, resolve.in_set(ModelSystems::Resolve));
+        app.register_type::<ResolveCollider>()
+            .add_systems(First, resolve.in_set(ModelSystems::Resolve));
     }
 }
 
 fn resolve(
-    meshes_res: Res<Assets<Mesh>>,
     types_res: Res<AppTypeRegistry>,
     mut commands: Commands,
-    models_q: Query<(Entity, &Children, &GltfExtras)>,
-    meshes_q: Query<&Mesh3d>,
+    models_q: Query<(Entity, &GltfExtras)>,
 ) {
-    for (entity, children, extras) in models_q.iter() {
+    for (entity, extras) in models_q.iter() {
         commands.entity(entity).remove::<GltfExtras>();
 
         let Ok(json_value) = serde_json::from_str::<Value>(&extras.value) else {
@@ -86,10 +130,12 @@ fn resolve(
 
         for (component_name, value) in extras.clone() {
             let Some(component_type) = types.get_with_type_path(&component_name).cloned() else {
+                warn!("unknown component {component_name}");
                 continue;
             };
 
             let Some(params) = value.as_str() else {
+                warn!("cant read component params {component_name}");
                 continue;
             };
 
@@ -101,26 +147,5 @@ fn resolve(
 
             commands.entity(entity).insert_reflect(value);
         }
-
-        let Some(convex_hull) = extras.get("collider").and_then(|v| v.as_bool()) else {
-            continue;
-        };
-
-        let mesh = meshes_q.get(children[0]).unwrap();
-
-        let mesh = meshes_res.get(mesh).unwrap();
-
-        commands.entity(children[0]).try_despawn();
-
-        let mut shape = ComputedColliderShape::TriMesh(TriMeshFlags::all());
-
-        if convex_hull {
-            shape = ComputedColliderShape::ConvexHull
-        }
-
-        commands
-            .entity(entity)
-            .try_insert(Collider::from_bevy_mesh(mesh, &shape).unwrap())
-            .remove::<Children>();
     }
 }
