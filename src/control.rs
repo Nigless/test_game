@@ -39,7 +39,7 @@ impl Default for Bindings {
             run: KeyCode::ShiftLeft,
             pause: KeyCode::Escape,
             switch_full_screen: KeyCode::F11,
-            mouse_sensitivity: 0.002,
+            mouse_sensitivity: 0.001,
             swim_up: KeyCode::Space,
             swim_down: KeyCode::ControlLeft,
         }

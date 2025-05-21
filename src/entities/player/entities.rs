@@ -12,8 +12,8 @@ use bevy_rapier3d::prelude::{
 };
 
 use crate::{
-    camera_controller::CameraController, library::Spawnable, linker::Linker, ray_caster::RayCaster,
-    shape_caster::ShapeCaster,
+    camera_controller::CameraController, library::Spawnable, linker::Linker, liquid::VolumeScale,
+    ray_caster::RayCaster, shape_caster::ShapeCaster,
 };
 
 use super::{
@@ -41,6 +41,7 @@ impl Player {
             },
             ColliderMassProperties::Mass(65.0),
             Parameters::default(),
+            VolumeScale::new(0.15),
         )
     }
 }

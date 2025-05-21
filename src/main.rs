@@ -29,7 +29,8 @@ use explosion::ExplosionPlugin;
 use levels::test_level::TestLevelBundle;
 use library::Spawnable;
 use linker::LinkerPlugin;
-use model::ModelPlugin;
+use liquid::{Liquid, LiquidPlugin};
+use model::{Model, ModelPlugin};
 use random::RandomPlugin;
 use ray_caster::RayCasterPlugin;
 use shape_caster::ShapeCasterPlugin;
@@ -42,6 +43,7 @@ mod explosion;
 mod levels;
 mod library;
 mod linker;
+mod liquid;
 mod random;
 mod ray_caster;
 mod shape_caster;
@@ -79,6 +81,7 @@ fn main() {
             DespawnPlugin,
             BillboardPlugin,
             ExplosionPlugin,
+            LiquidPlugin,
         ))
         .insert_resource(AmbientLight {
             color: Color::WHITE,

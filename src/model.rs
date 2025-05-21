@@ -113,9 +113,9 @@ impl Plugin for ModelPlugin {
 fn resolve(
     types_res: Res<AppTypeRegistry>,
     mut commands: Commands,
-    models_q: Query<(Entity, &GltfExtras)>,
+    models_q: Query<(Entity, &GltfExtras, &Name)>,
 ) {
-    for (entity, extras) in models_q.iter() {
+    for (entity, extras, name) in models_q.iter() {
         commands.entity(entity).remove::<GltfExtras>();
 
         let Ok(json_value) = serde_json::from_str::<Value>(&extras.value) else {
@@ -130,12 +130,12 @@ fn resolve(
 
         for (component_name, value) in extras.clone() {
             let Some(component_type) = types.get_with_type_path(&component_name).cloned() else {
-                warn!("unknown component {component_name}");
+                warn!("unknown component {component_name} of {entity} \"{name}\" object");
                 continue;
             };
 
             let Some(params) = value.as_str() else {
-                warn!("cant read component params {component_name}");
+                warn!("cant read {component_name} component params {value} of {entity} \"{name}\" object");
                 continue;
             };
 

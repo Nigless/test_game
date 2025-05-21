@@ -6,6 +6,7 @@ use crate::control::{Control, ControlSystems, Input};
 use crate::despawn::Despawn;
 use crate::library::{move_toward, Spawnable};
 use crate::linker::Linker;
+use crate::liquid::{Floating, LiquidSystems};
 use crate::ray_caster::RayCasterSystems;
 use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
 
@@ -57,7 +58,8 @@ impl Plugin for PlayerPlugin {
                 FixedPreUpdate,
                 (PlayerSystems::Prepare, PlayerSystems::FixedUpdate)
                     .chain()
-                    .after(ShapeCasterSystems),
+                    .after(ShapeCasterSystems)
+                    .after(LiquidSystems::Update),
             )
             .add_systems(
                 FixedPreUpdate,
@@ -67,6 +69,7 @@ impl Plugin for PlayerPlugin {
                         collider,
                         moving,
                         falling.run_if(|input: Res<Input>| input.moving.length() > 0.0),
+                        swimming,
                         jumping,
                     )
                         .in_set(PlayerSystems::FixedUpdate),
@@ -107,6 +110,7 @@ fn ground_check(
         &mut GravityScale,
         &mut Transform,
         &mut Velocity,
+        Option<&Floating>,
     )>,
     time: Res<Time<Fixed>>,
     caster_q: Query<&ShapeCaster, Without<Status>>,
@@ -114,7 +118,9 @@ fn ground_check(
 ) {
     let config = config_q.get_single().unwrap();
 
-    for (linker, mut status, mut gravity, mut transform, mut velocity) in entity_q.iter_mut() {
+    for (linker, mut status, mut gravity, mut transform, mut velocity, floating) in
+        entity_q.iter_mut()
+    {
         status.can_standup = true;
 
         status.surface = None;
@@ -135,6 +141,10 @@ fn ground_check(
             if cast_up_result.distance + cast_down_result.distance < COLLIDER_HALF_HEIGHT * 2.0 {
                 status.can_standup = false;
             }
+        }
+
+        if floating.is_some() {
+            continue;
         }
 
         let gravity_direction = config.gravity.normalize();
@@ -184,33 +194,40 @@ fn camera(
 fn collider(
     input: Res<Input>,
     time: Res<Time<Fixed>>,
-    mut entity_q: Query<(&mut Collider, &mut Status, &mut Transform, &Linker), With<Control>>,
+    mut entity_q: Query<
+        (
+            &mut Collider,
+            &mut Status,
+            &mut Transform,
+            &Linker,
+            Option<&Floating>,
+        ),
+        With<Control>,
+    >,
     caster_q: Query<&ShapeCaster, Without<Status>>,
     mut head_q: Query<&mut Transform, Without<Status>>,
     config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
     let config = config_q.get_single().unwrap();
 
-    for (mut collider, mut status, mut transform, linker) in entity_q.iter_mut() {
+    for (mut collider, mut status, mut transform, linker, floating) in entity_q.iter_mut() {
         let cast_down = caster_q.get(*linker.get("cast_down").unwrap()).unwrap();
         let cast_up = caster_q.get(*linker.get("cast_up").unwrap()).unwrap();
 
-        let is_touching_ground = |height: f32| {
-            if let Some(result) = cast_down.result.as_ref() {
-                let surface_gap = result.distance - SKIN_WIDTH - height;
+        let distance_to_ground = |height: f32| {
+            let Some(result) = cast_down.result.as_ref() else {
+                return f32::INFINITY;
+            };
 
-                return surface_gap < MAX_SURFACE_GAP;
-            }
-            false
+            return result.distance - SKIN_WIDTH * 2.0 - height;
         };
 
-        let celling_gap = |height: f32| {
-            if let Some(result) = cast_up.result.as_ref() {
-                let surface_gap = result.distance - SKIN_WIDTH - height;
+        let distance_to_celling = |height: f32| {
+            let Some(result) = cast_up.result.as_ref() else {
+                return f32::INFINITY;
+            };
 
-                return surface_gap < SKIN_WIDTH;
-            }
-            false
+            return result.distance - SKIN_WIDTH * 2.0 - height;
         };
 
         let get_height_diff = || {
@@ -221,6 +238,10 @@ fn collider(
             } else {
                 return 0.0;
             };
+
+            if floating.is_some() && status.can_standup {
+                target_height = COLLIDER_HALF_HEIGHT
+            }
 
             if status.current_collider_height == target_height {
                 return 0.0;
@@ -256,22 +277,30 @@ fn collider(
             *collider = Collider::capsule_y(status.current_collider_height, COLLIDER_RADIUS);
         }
 
+        // sitting down
         if status.current_collider_height < original_height {
-            if is_touching_ground(original_height) {
-                transform.translation -= gravity_direction * height_diff;
+            let distance = distance_to_ground(original_height);
+            if distance <= 0.0 {
+                transform.translation +=
+                    gravity_direction * distance_to_ground(status.current_collider_height);
             }
             continue;
         }
 
+        // standing up
         if status.current_collider_height > original_height {
-            if is_touching_ground(status.current_collider_height) {
-                transform.translation -= gravity_direction * height_diff;
+            let distance = distance_to_ground(status.current_collider_height);
+
+            if distance < 0.0 {
+                transform.translation += gravity_direction * distance;
 
                 continue;
             }
 
-            if celling_gap(status.current_collider_height) {
-                transform.translation += gravity_direction * height_diff;
+            let distance = distance_to_celling(status.current_collider_height);
+
+            if distance < 0.0 {
+                transform.translation -= gravity_direction * distance;
             }
 
             continue;
@@ -282,13 +311,16 @@ fn collider(
 fn moving(
     time: Res<Time<Fixed>>,
     input: Res<Input>,
-    mut entity_q: Query<(
-        &mut Velocity,
-        &Transform,
-        &Parameters,
-        &Status,
-        Option<&Control>,
-    )>,
+    mut entity_q: Query<
+        (
+            &mut Velocity,
+            &Transform,
+            &Parameters,
+            &Status,
+            Option<&Control>,
+        ),
+        Without<Floating>,
+    >,
 ) {
     for (mut velocity, transform, parameters, status, control) in entity_q.iter_mut() {
         let Some(ground_surface) = status.surface else {
@@ -327,10 +359,59 @@ fn moving(
     }
 }
 
+fn swimming(
+    time: Res<Time<Fixed>>,
+    input: Res<Input>,
+    rapier: Single<&RapierContext, Without<Floating>>,
+    mut entity_q: Query<
+        (
+            &mut Velocity,
+            &Transform,
+            &GlobalTransform,
+            &Parameters,
+            &Floating,
+        ),
+        With<Control>,
+    >,
+) {
+    let filter = QueryFilter::default();
+
+    for (mut velocity, transform, global_transform, parameters, floating) in entity_q.iter_mut() {
+        let mut vertical_direction: f32 = 0.0;
+
+        if input.swimming_up {
+            vertical_direction += 1.0;
+        }
+
+        if input.swimming_down {
+            vertical_direction -= 1.0;
+        }
+
+        let mut can_swim_up = false;
+
+        rapier.intersections_with_point(global_transform.translation(), filter, |e| {
+            can_swim_up = floating.pool() == e;
+            !can_swim_up
+        });
+
+        if !can_swim_up {
+            vertical_direction = vertical_direction.min(0.0);
+        }
+
+        let direction = transform.rotation
+            * Vec3::new(input.moving.x, vertical_direction, input.moving.y).normalize_or_zero();
+
+        velocity.linvel += direction * parameters.swimming_speed * time.delta_secs();
+    }
+}
+
 fn falling(
     time: Res<Time<Fixed>>,
     input: Res<Input>,
-    mut entity_q: Query<(&mut Velocity, &Transform, &Parameters, &Status), With<Control>>,
+    mut entity_q: Query<
+        (&mut Velocity, &Transform, &Parameters, &Status),
+        (With<Control>, Without<Floating>),
+    >,
     config_q: Query<&RapierConfiguration, Without<Status>>,
 ) {
     let config = config_q.get_single().unwrap();

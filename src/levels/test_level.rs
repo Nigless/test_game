@@ -83,6 +83,24 @@ impl Spawnable for TestLevelBundle {
             .insert(Transform::from_xyz(0.0, 2.0, 20.0))
             .set_parent(entity);
 
+        BlockBundle::new(2.0, 0.1, 2.0)
+            .with_mass(100.0)
+            .spawn(commands)
+            .insert(Transform::from_xyz(-20.0, 1.0, 2.0))
+            .set_parent(entity);
+
+        BlockBundle::new(0.2, 0.2, 0.2)
+            .with_mass(1.0)
+            .spawn(commands)
+            .insert(Transform::from_xyz(-22.0, 1.0, 2.0))
+            .set_parent(entity);
+
+        BlockBundle::new(1.0, 1.0, 1.0)
+            .with_mass(800.0)
+            .spawn(commands)
+            .insert(Transform::from_xyz(-22.0, 1.0, 4.0))
+            .set_parent(entity);
+
         TrafficCone
             .spawn(commands)
             .insert(Transform::from_xyz(0.0, 1.0, 0.0))

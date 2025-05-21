@@ -24,29 +24,29 @@ pub struct Fireball;
 impl Spawnable for Fireball {
     fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
         let entity = commands
-            .spawn(self.clone())
+            .spawn((
+                self.clone(),
+                Name::new("fireball"),
+                LockedAxes::ROTATION_LOCKED,
+                NotShadowCaster,
+                RigidBody::Dynamic,
+                GravityScale(0.0),
+                Collider::ball(0.3),
+                ActiveEvents::COLLISION_EVENTS,
+                PointLight {
+                    intensity: 100_000.0,
+                    color: ORANGE.into(),
+                    shadows_enabled: true,
+                    ..default()
+                },
+            ))
             .queue(|entity: Entity, world: &mut World| {
                 let assets = world.get_resource::<FireballAssets>().cloned().unwrap();
 
-                let mut commands = world.commands();
-
-                commands.entity(entity).insert((
-                    Name::new("fireball"),
-                    LockedAxes::ROTATION_LOCKED,
-                    Mesh3d(assets.mesh.clone()),
-                    MeshMaterial3d(assets.material.clone()),
-                    NotShadowCaster,
-                    RigidBody::Dynamic,
-                    GravityScale(0.0),
-                    Collider::ball(0.3),
-                    ActiveEvents::COLLISION_EVENTS,
-                    PointLight {
-                        intensity: 100_000.0,
-                        color: ORANGE.into(),
-                        shadows_enabled: true,
-                        ..default()
-                    },
-                ));
+                world
+                    .commands()
+                    .entity(entity)
+                    .insert((Mesh3d(assets.mesh), MeshMaterial3d(assets.material)));
             })
             .id();
 

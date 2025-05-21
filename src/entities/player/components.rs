@@ -3,7 +3,7 @@ use bevy::{prelude::Component, reflect::Reflect};
 use bevy::prelude::*;
 use bevy_rapier3d::prelude::{GravityScale, Velocity};
 
-use super::{Player, COLLIDER_HALF_HEIGHT};
+use super::COLLIDER_HALF_HEIGHT;
 
 #[derive(Component, Reflect, PartialEq)]
 #[reflect(Component)]
@@ -31,7 +31,7 @@ impl Default for Parameters {
             standing_jump_height: 4.0,
             crouching_jump_height: 2.0,
             crouching_speed: 2.0,
-            swimming_speed: 60.0,
+            swimming_speed: 6.0,
         }
     }
 }
