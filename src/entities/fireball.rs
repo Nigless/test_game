@@ -95,13 +95,18 @@ fn update(
             continue;
         };
 
-        let Ok((_, transform)) = fireball_q.get(*fireball) else {
+        let Ok((parent, transform)) = fireball_q.get(*fireball) else {
             continue;
         };
 
-        Explosion::new(10.0)
+        let explosion = Explosion::new(10.0)
             .spawn(&mut commands)
-            .insert(transform.clone());
+            .insert(transform.clone())
+            .id();
+
+        if let Some(parent) = parent {
+            commands.entity(explosion).set_parent(parent.get());
+        }
 
         commands.entity(*fireball).despawn_recursive();
     }

@@ -26,13 +26,13 @@ use entities::{
     player::{Player, PlayerPlugin},
 };
 use explosion::ExplosionPlugin;
-use levels::test_level::TestLevelBundle;
 use library::Spawnable;
 use linker::LinkerPlugin;
 use liquid::{Liquid, LiquidPlugin};
 use model::{Model, ModelPlugin};
 use random::RandomPlugin;
 use ray_caster::RayCasterPlugin;
+use scenes::TestScene;
 use shape_caster::ShapeCasterPlugin;
 use throttle::ThrottlePlugin;
 use tracy_client::Client;
@@ -40,12 +40,12 @@ use with_material::WithMaterial;
 use with_mesh::WithMesh;
 mod despawn;
 mod explosion;
-mod levels;
 mod library;
 mod linker;
 mod liquid;
 mod random;
 mod ray_caster;
+mod scenes;
 mod shape_caster;
 mod throttle;
 mod with_material;
@@ -135,5 +135,5 @@ fn screen_mode_update(mut input: ResMut<Input>, mut window: Single<&mut Window>)
 }
 
 fn startup(mut commands: Commands) {
-    TestLevelBundle.spawn(&mut commands);
+    TestScene.spawn(&mut commands);
 }

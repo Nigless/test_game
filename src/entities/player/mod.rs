@@ -29,7 +29,6 @@ const MAX_SLOPE_ANGLE: f32 = consts::PI / 3.8;
 const HAND_DISTANCE: f32 = 2.0;
 const COLLIDER_TRANSITION_SPEED: f32 = 0.1;
 const COLLIDER_RADIUS: f32 = 0.3;
-const MAX_SURFACE_GAP: f32 = 0.03 + SKIN_WIDTH;
 const SKIN_WIDTH: f32 = 0.05;
 const COLLIDER_HALF_HEIGHT: f32 = 1.0 - COLLIDER_RADIUS;
 const COLLIDER_CROUCHING_HALF_HEIGHT: f32 = COLLIDER_HALF_HEIGHT * 0.4;
@@ -81,67 +80,69 @@ impl Plugin for PlayerPlugin {
 fn fireball(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
-    entity_q: Query<&Linker, With<Status>>,
+    entity_q: Query<(Option<&Parent>, &Linker), With<Status>>,
     camera_q: Query<&GlobalTransform>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyE) {
         return;
     }
 
-    for linker in entity_q.iter() {
-        let transform = camera_q.get(*linker.get("head").unwrap()).unwrap();
+    for (parent, linker) in entity_q.iter() {
+        let Some(transform) = linker.get("head").and_then(|e| camera_q.get(*e).ok()) else {
+            continue;
+        };
 
         let direction = transform.rotation() * Vec3::NEG_Z;
 
         let position = transform.translation() + direction;
 
-        Fireball.spawn(&mut commands).insert((
-            Transform::from_translation(position),
-            Velocity::linear(direction * 50.0),
-            Despawn::after(Duration::from_secs(10)),
-        ));
+        let fireball = Fireball
+            .spawn(&mut commands)
+            .insert((
+                Transform::from_translation(position),
+                Velocity::linear(direction * 50.0),
+                Despawn::after(Duration::from_secs(10)),
+            ))
+            .id();
+
+        if let Some(parent) = parent {
+            commands.entity(fireball).set_parent(parent.get());
+        }
     }
 }
 
 fn ground_check(
-    mut entity_q: Query<(
-        &Linker,
-        &mut Status,
-        &mut GravityScale,
-        &mut Transform,
-        &mut Velocity,
-        Option<&Floating>,
-    )>,
-    time: Res<Time<Fixed>>,
+    mut entity_q: Query<(&Linker, &mut Status, Option<&Floating>)>,
     caster_q: Query<&ShapeCaster, Without<Status>>,
     config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
     let config = config_q.get_single().unwrap();
 
-    for (linker, mut status, mut gravity, mut transform, mut velocity, floating) in
-        entity_q.iter_mut()
-    {
+    for (linker, mut status, floating) in entity_q.iter_mut() {
         status.can_standup = true;
 
         status.surface = None;
 
-        gravity.0 = 1.0;
-
-        let cast_down = caster_q.get(*linker.get("cast_down").unwrap()).unwrap();
-
-        let Some(cast_down_result) = cast_down.result.as_ref() else {
+        let Some(cast_down_result) = linker
+            .get("cast_down")
+            .and_then(|e| caster_q.get(*e).ok())
+            .and_then(|c| c.result.as_ref())
+        else {
             continue;
         };
 
         let normal = cast_down_result.normal;
 
-        let cast_up = caster_q.get(*linker.get("cast_up").unwrap()).unwrap();
-
-        if let Some(cast_up_result) = &cast_up.result {
-            if cast_up_result.distance + cast_down_result.distance < COLLIDER_HALF_HEIGHT * 2.0 {
-                status.can_standup = false;
-            }
-        }
+        if linker
+            .get("cast_up")
+            .and_then(|e| caster_q.get(*e).ok())
+            .and_then(|c| c.result.as_ref())
+            .map_or(false, |r| {
+                r.distance + cast_down_result.distance < COLLIDER_HALF_HEIGHT * 2.0
+            })
+        {
+            status.can_standup = false;
+        };
 
         if floating.is_some() {
             continue;
@@ -155,16 +156,8 @@ fn ground_check(
 
         let ground_gap = cast_down_result.distance - SKIN_WIDTH - status.current_collider_height;
 
-        if ground_gap > MAX_SURFACE_GAP {
+        if ground_gap > SKIN_WIDTH {
             continue;
-        }
-
-        if ground_gap < SKIN_WIDTH {
-            gravity.0 = 0.0;
-
-            velocity.linvel = velocity.linvel.reject_from(normal);
-
-            transform.translation += normal * (SKIN_WIDTH - ground_gap) * (time.delta_secs() / 0.5)
         }
 
         status.surface = Some(normal);
@@ -219,7 +212,7 @@ fn collider(
                 return f32::INFINITY;
             };
 
-            return result.distance - SKIN_WIDTH * 2.0 - height;
+            return result.distance - SKIN_WIDTH - height;
         };
 
         let distance_to_celling = |height: f32| {
@@ -227,7 +220,7 @@ fn collider(
                 return f32::INFINITY;
             };
 
-            return result.distance - SKIN_WIDTH * 2.0 - height;
+            return result.distance - SKIN_WIDTH - height;
         };
 
         let get_height_diff = || {

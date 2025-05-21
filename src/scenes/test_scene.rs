@@ -11,21 +11,21 @@ use crate::{
     model::Model,
 };
 
-pub struct TestLevelBundle;
+pub struct TestScene;
 
-impl TestLevelBundle {
-    fn bundle() -> impl Bundle {
-        (
-            Name::new("test_scene"),
-            Model::new("test_scene/model.glb"),
-            RigidBody::Fixed,
-        )
-    }
-}
-
-impl Spawnable for TestLevelBundle {
+impl Spawnable for TestScene {
     fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
-        let entity = commands.spawn(Self::bundle()).id();
+        let entity = commands
+            .spawn((Name::new("scene"), Transform::default()))
+            .id();
+
+        commands
+            .spawn((
+                Name::new("test_level"),
+                Model::new("test_level/model.glb"),
+                RigidBody::Fixed,
+            ))
+            .set_parent(entity);
 
         commands
             .spawn((
