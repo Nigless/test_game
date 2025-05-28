@@ -1,50 +1,55 @@
 use std::{env, time::Duration};
 
+use app_state::AppStatePlugin;
 use bevy::{
     color::palettes::css::RED,
     dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin},
+    log::{Level, LogPlugin},
     pbr::NotShadowCaster,
     prelude::*,
     render::primitives::Aabb,
+    state::app::StatesPlugin,
     window::WindowMode,
 };
 mod billboard;
-mod camera_controller;
 mod control;
 mod entities;
-mod model;
 use bevy_hanabi::HanabiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
 use billboard::BillboardPlugin;
-use camera_controller::{CameraControllerPlugin, Spectate};
 use control::{Control, ControlPlugin, Input};
 use despawn::{Despawn, DespawnPlugin};
 use entities::{
     block::BlockBundle,
     fireball::{Fireball, FireballPlugin},
-    player::{Player, PlayerPlugin},
+    player::Player,
+    EntitiesPlugin,
 };
 use explosion::ExplosionPlugin;
 use library::Spawnable;
 use linker::LinkerPlugin;
 use liquid::{Liquid, LiquidPlugin};
-use model::{Model, ModelPlugin};
+use prefab::PrefabPlugin;
 use random::RandomPlugin;
 use ray_caster::RayCasterPlugin;
-use scenes::TestScene;
+use saves::SavesPlugin;
+use scenes::ScenesPlugin;
 use shape_caster::ShapeCasterPlugin;
 use throttle::ThrottlePlugin;
 use tracy_client::Client;
 use with_material::WithMaterial;
 use with_mesh::WithMesh;
+mod app_state;
 mod despawn;
 mod explosion;
 mod library;
 mod linker;
 mod liquid;
+mod prefab;
 mod random;
 mod ray_caster;
+mod saves;
 mod scenes;
 mod shape_caster;
 mod throttle;
@@ -68,10 +73,6 @@ fn main() {
             HanabiPlugin,
         ))
         .add_plugins((
-            ModelPlugin,
-            PlayerPlugin,
-            FireballPlugin,
-            CameraControllerPlugin,
             ControlPlugin,
             ShapeCasterPlugin,
             LinkerPlugin,
@@ -81,14 +82,16 @@ fn main() {
             DespawnPlugin,
             BillboardPlugin,
             ExplosionPlugin,
-            LiquidPlugin,
+            AppStatePlugin,
+            EntitiesPlugin,
+            ScenesPlugin,
         ))
+        .add_plugins((SavesPlugin, PrefabPlugin))
         .insert_resource(AmbientLight {
             color: Color::WHITE,
             brightness: 100.0,
         })
         .insert_resource(ClearColor(Color::srgb(0.8, 0.9, 1.0)))
-        .add_systems(Startup, startup.in_set(AppSystems::Startup))
         .add_systems(PreUpdate, screen_mode_update.in_set(AppSystems::Update));
 
     #[cfg(debug_assertions)]
@@ -132,8 +135,4 @@ fn screen_mode_update(mut input: ResMut<Input>, mut window: Single<&mut Window>)
 
     window.cursor_options.visible = false;
     window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Current)
-}
-
-fn startup(mut commands: Commands) {
-    TestScene.spawn(&mut commands);
 }

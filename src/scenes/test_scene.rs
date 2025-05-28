@@ -1,111 +1,36 @@
-use std::f32::consts;
+use std::{f32::consts, ops::Deref};
 
-use bevy::prelude::*;
-use bevy_rapier3d::prelude::{RigidBody, Velocity};
-
-use crate::{
-    camera_controller::Spectate,
-    control::Control,
-    entities::{block::BlockBundle, fireball::Fireball, player::Player, traffic_cone::TrafficCone},
-    library::Spawnable,
-    model::Model,
+use bevy::{
+    ecs::{component::ComponentId, world::DeferredWorld},
+    prelude::*,
 };
+use bevy_rapier3d::prelude::RigidBody;
 
+use crate::{prefab::Prefab, saves::Serializable};
+
+#[derive(Component, Reflect, Clone)]
+#[reflect(Component)]
 pub struct TestScene;
 
-impl Spawnable for TestScene {
-    fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
-        let entity = commands
-            .spawn((Name::new("scene"), Transform::default()))
-            .id();
+pub fn create_test_scene() -> Scene {
+    let mut world = World::new();
 
-        commands
-            .spawn((
-                Name::new("test_level"),
-                Model::new("test_level/model.glb"),
-                RigidBody::Fixed,
-            ))
-            .set_parent(entity);
+    world.spawn((Prefab::new("test_scene/model.glb"), RigidBody::Fixed));
+    world.spawn((
+        Name::new("directional_light"),
+        Serializable::new("directional_light"),
+        DirectionalLight {
+            illuminance: 3000.0,
+            shadows_enabled: true,
+            color: Color::WHITE,
+            ..default()
+        },
+        Transform::from_rotation(
+            Quat::from_rotation_y(consts::PI * -0.1) * Quat::from_rotation_x(consts::PI * -0.6),
+        ),
+    ));
 
-        commands
-            .spawn((
-                Name::new("directional_light"),
-                DirectionalLight {
-                    illuminance: 3000.0,
-                    shadows_enabled: true,
-                    color: Color::WHITE,
-                    ..default()
-                },
-                Transform::from_rotation(
-                    Quat::from_rotation_y(consts::PI * -0.1)
-                        * Quat::from_rotation_x(consts::PI * -0.6),
-                ),
-            ))
-            .set_parent(entity);
+    world.flush();
 
-        Player
-            .spawn(commands)
-            .insert((Transform::from_xyz(0.0, 3.0, 0.0), Spectate, Control))
-            .set_parent(entity);
-
-        Fireball
-            .spawn(commands)
-            .insert((
-                Transform::from_xyz(0.0, 1.0, 3.0),
-                Velocity::linear(Vec3::X),
-            ))
-            .set_parent(entity);
-
-        Fireball
-            .spawn(commands)
-            .insert(Transform::from_xyz(0.0, 1.0, -3.0))
-            .set_parent(entity);
-
-        BlockBundle::default()
-            .spawn(commands)
-            .insert(Transform::from_xyz(-4.0, 3.0, 24.0))
-            .set_parent(entity);
-
-        BlockBundle::default()
-            .spawn(commands)
-            .insert(Transform::from_xyz(4.0, 3.0, 16.0))
-            .set_parent(entity);
-
-        BlockBundle::new(1.0, 0.5, 4.0)
-            .with_mass(100.0)
-            .spawn(commands)
-            .insert(Transform::from_xyz(4.0, 3.0, 24.0))
-            .set_parent(entity);
-
-        BlockBundle::new(0.5, 0.5, 0.5)
-            .with_mass(25.0 / 2.0)
-            .spawn(commands)
-            .insert(Transform::from_xyz(0.0, 2.0, 20.0))
-            .set_parent(entity);
-
-        BlockBundle::new(2.0, 0.1, 2.0)
-            .with_mass(100.0)
-            .spawn(commands)
-            .insert(Transform::from_xyz(-20.0, 1.0, 2.0))
-            .set_parent(entity);
-
-        BlockBundle::new(0.2, 0.2, 0.2)
-            .with_mass(1.0)
-            .spawn(commands)
-            .insert(Transform::from_xyz(-22.0, 1.0, 2.0))
-            .set_parent(entity);
-
-        BlockBundle::new(1.0, 1.0, 1.0)
-            .with_mass(800.0)
-            .spawn(commands)
-            .insert(Transform::from_xyz(-22.0, 1.0, 4.0))
-            .set_parent(entity);
-
-        TrafficCone
-            .spawn(commands)
-            .insert(Transform::from_xyz(0.0, 1.0, 0.0))
-            .set_parent(entity);
-
-        commands.entity(entity)
-    }
+    Scene::new(world)
 }

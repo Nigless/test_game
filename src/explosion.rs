@@ -265,7 +265,9 @@ fn update(
 
             let body = rapier.collider_parent(collider).unwrap_or(collider);
 
-            let (rigid_body, transform, impulse, mass_properties) = body_q.get(body).unwrap();
+            let Ok((rigid_body, transform, impulse, mass_properties)) = body_q.get(body) else {
+                continue;
+            };
 
             if *rigid_body != RigidBody::Dynamic {
                 continue;

@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use bevy::{
     app::Plugin,
@@ -11,7 +11,7 @@ use bevy::{
     prelude::*,
     state::commands,
 };
-use serde::{Deserialize, Serialize};
+use chrono::{DateTime, TimeDelta, Utc};
 
 use crate::library::Spawnable;
 
@@ -20,7 +20,7 @@ use crate::library::Spawnable;
 pub struct Despawn {
     recursive: bool,
     timeout: Option<Duration>,
-    crated_at: Option<Instant>,
+    crated_at: Option<u128>,
 }
 
 impl Despawn {
@@ -54,7 +54,12 @@ impl Despawn {
             return true;
         };
 
-        crated_at.elapsed() > timeout
+        let time_now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        time_now - crated_at > timeout.as_millis()
     }
 }
 
@@ -68,7 +73,12 @@ impl Component for Despawn {
             if despawn.timeout.is_some() {
                 let mut despawn = world.get_mut::<Despawn>(entity).unwrap();
 
-                despawn.crated_at = Some(Instant::now());
+                despawn.crated_at = Some(
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis(),
+                );
 
                 return;
             }

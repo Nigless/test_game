@@ -25,6 +25,10 @@ pub struct Bindings {
     pub pause: KeyCode,
     pub switch_full_screen: KeyCode,
     pub mouse_sensitivity: f32,
+    pub grub: KeyCode,
+    pub pickup: KeyCode,
+    pub drop: KeyCode,
+    pub save: KeyCode,
 }
 
 impl Default for Bindings {
@@ -42,6 +46,10 @@ impl Default for Bindings {
             mouse_sensitivity: 0.001,
             swim_up: KeyCode::Space,
             swim_down: KeyCode::ControlLeft,
+            grub: KeyCode::KeyF,
+            pickup: KeyCode::KeyE,
+            drop: KeyCode::KeyQ,
+            save: KeyCode::F5,
         }
     }
 }
@@ -57,6 +65,7 @@ pub struct Input {
     pub swimming_down: bool,
     pub crouching: bool,
     pub pausing: bool,
+    saving: bool,
     full_screen_switching: bool,
 }
 
@@ -64,6 +73,15 @@ impl Input {
     pub fn jumping(&mut self) -> bool {
         if self.jumping {
             self.jumping = false;
+            return true;
+        }
+
+        false
+    }
+
+    pub fn saving(&mut self) -> bool {
+        if self.saving {
+            self.saving = false;
             return true;
         }
 
@@ -142,6 +160,7 @@ fn update(
     input.crouching = keyboard.pressed(controls.crouch);
     input.swimming_up = keyboard.pressed(controls.swim_up);
     input.swimming_down = keyboard.pressed(controls.swim_down);
+    // input.saving = keyboard.just_pressed(controls.save) || input.saving;
 
     input.pausing = keyboard.just_pressed(controls.pause);
 }

@@ -1,4 +1,4 @@
-use std::{thread::sleep, time::Duration};
+use std::{thread, time::Duration};
 
 use bevy::{app::Plugin, ecs::system::Resource, prelude::*};
 
@@ -32,7 +32,7 @@ impl Plugin for ThrottlePlugin {
 }
 
 fn throttle(throttle: Res<Throttle>) {
-    sleep(Duration::from_secs_f32(
+    thread::sleep(Duration::from_secs_f32(
         1.0 / (throttle.target_frame_rate as f32),
     ));
 }

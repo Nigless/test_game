@@ -30,7 +30,6 @@ use bevy_rapier3d::{
 use bevy_rapier3d::na::Unit;
 use rand::Rng;
 use rand_chacha::rand_core::le;
-use serde::{Deserialize, Serialize};
 
 use crate::{
     library::{n_gon_area, n_gon_from_points, project_points},
@@ -44,7 +43,7 @@ struct Intersection {
     volume: f32,
 }
 
-#[derive(Reflect, Serialize, Deserialize)]
+#[derive(Reflect)]
 #[reflect(Component)]
 pub struct Liquid {
     density: f32,

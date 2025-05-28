@@ -1,7 +1,6 @@
 use std::f32::consts;
 use std::time::Duration;
 
-use crate::camera_controller::CameraController;
 use crate::control::{Control, ControlSystems, Input};
 use crate::despawn::Despawn;
 use crate::library::{move_toward, Spawnable};
@@ -17,7 +16,6 @@ use bevy_rapier3d::plugin::{RapierConfiguration, RapierContext};
 use bevy_rapier3d::prelude::{Collider, GravityScale, QueryFilter};
 
 use bevy::prelude::*;
-use components::{Parameters, Status};
 use entities::{Head, PlayerCamera, RayCast, ShapeCast};
 mod components;
 mod entities;
@@ -44,11 +42,11 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Parameters>()
-            .register_type::<Status>()
+        app.register_type::<Player>()
+            .register_type::<components::State>()
             .add_systems(
                 PreUpdate,
-                (camera, fireball)
+                (head, fireball)
                     .in_set(PlayerSystems::Update)
                     .after(ControlSystems)
                     .before(RayCasterSystems),
@@ -80,7 +78,7 @@ impl Plugin for PlayerPlugin {
 fn fireball(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
-    entity_q: Query<(Option<&Parent>, &Linker), With<Status>>,
+    entity_q: Query<(Option<&Parent>, &Linker), With<components::State>>,
     camera_q: Query<&GlobalTransform>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyE) {
@@ -112,8 +110,8 @@ fn fireball(
 }
 
 fn ground_check(
-    mut entity_q: Query<(&Linker, &mut Status, Option<&Floating>)>,
-    caster_q: Query<&ShapeCaster, Without<Status>>,
+    mut entity_q: Query<(&Linker, &mut components::State, Option<&Floating>)>,
+    caster_q: Query<&ShapeCaster, Without<components::State>>,
     config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
     let config = config_q.get_single().unwrap();
@@ -164,22 +162,30 @@ fn ground_check(
     }
 }
 
-fn camera(
+fn head(
     mut input: ResMut<Input>,
-    mut entity_q: Query<(&mut Transform, &Linker), (With<Control>, With<Parameters>)>,
-    mut head_q: Query<&mut Transform, Without<Parameters>>,
+    mut entity_q: Query<
+        (&mut Transform, &Linker, &mut components::State),
+        (With<Control>, With<Player>),
+    >,
+    mut head_q: Query<&mut Transform, Without<Player>>,
 ) {
     let looking = input.looking();
 
-    for (mut transform, linker) in entity_q.iter_mut() {
+    for (mut transform, linker, mut state) in entity_q.iter_mut() {
         let mut head_transform = head_q.get_mut(*linker.get("head").unwrap()).unwrap();
 
-        let rotation = head_transform.rotation * Quat::from_rotation_x(looking.y);
+        state.head_tilt += looking.y;
 
-        if (rotation * Vec3::Y).y >= 0.0 {
-            head_transform.rotation = rotation;
+        if state.head_tilt > consts::PI / 2.0 {
+            state.head_tilt = consts::PI / 2.0
         }
 
+        if state.head_tilt < -consts::PI / 2.0 {
+            state.head_tilt = -consts::PI / 2.0
+        }
+
+        head_transform.rotation = Quat::from_rotation_x(state.head_tilt);
         transform.rotation *= Quat::from_rotation_y(looking.x);
     }
 }
@@ -190,15 +196,15 @@ fn collider(
     mut entity_q: Query<
         (
             &mut Collider,
-            &mut Status,
+            &mut components::State,
             &mut Transform,
             &Linker,
             Option<&Floating>,
         ),
         With<Control>,
     >,
-    caster_q: Query<&ShapeCaster, Without<Status>>,
-    mut head_q: Query<&mut Transform, Without<Status>>,
+    caster_q: Query<&ShapeCaster, Without<components::State>>,
+    mut head_q: Query<&mut Transform, Without<components::State>>,
     config_q: Query<&RapierConfiguration, Without<ShapeCaster>>,
 ) {
     let config = config_q.get_single().unwrap();
@@ -308,8 +314,8 @@ fn moving(
         (
             &mut Velocity,
             &Transform,
-            &Parameters,
-            &Status,
+            &Player,
+            &components::State,
             Option<&Control>,
         ),
         Without<Floating>,
@@ -361,7 +367,7 @@ fn swimming(
             &mut Velocity,
             &Transform,
             &GlobalTransform,
-            &Parameters,
+            &Player,
             &Floating,
         ),
         With<Control>,
@@ -402,10 +408,10 @@ fn falling(
     time: Res<Time<Fixed>>,
     input: Res<Input>,
     mut entity_q: Query<
-        (&mut Velocity, &Transform, &Parameters, &Status),
+        (&mut Velocity, &Transform, &Player, &components::State),
         (With<Control>, Without<Floating>),
     >,
-    config_q: Query<&RapierConfiguration, Without<Status>>,
+    config_q: Query<&RapierConfiguration, Without<components::State>>,
 ) {
     let config = config_q.get_single().unwrap();
 
@@ -440,7 +446,7 @@ fn falling(
 
 fn jumping(
     mut input: ResMut<Input>,
-    mut entity_q: Query<(&mut Velocity, &Parameters, &Status), With<Control>>,
+    mut entity_q: Query<(&mut Velocity, &Player, &components::State), With<Control>>,
 ) {
     if !input.jumping() {
         return;
