@@ -4,7 +4,9 @@ use bevy::{
     audio::Volume,
     core::Name,
     ecs::{component::ComponentId, world::DeferredWorld},
+    image,
     prelude::{Bundle, Projection},
+    state::commands,
     text::cosmic_text::ttf_parser::name,
     utils::default,
 };
@@ -14,8 +16,16 @@ use bevy_rapier3d::prelude::{
 };
 
 use crate::{
-    control::Control, library::Spawnable, linker::Linker, liquid::VolumeScale,
-    ray_caster::RayCaster, saves::Serializable, shape_caster::ShapeCaster,
+    plugins::{
+        health::{DeadEvent, Health},
+        input::Control,
+        linker::Linker,
+        liquid::VolumeScale,
+        ray_caster::RayCaster,
+        serializable::Serializable,
+        shape_caster::ShapeCaster,
+    },
+    stores::game::PlayerDeadEvent,
 };
 
 use super::{
@@ -64,41 +74,49 @@ impl Default for Player {
 fn spawn(mut world: DeferredWorld<'_>, entity: Entity, _: ComponentId) {
     let commands = &mut world.commands();
 
-    commands.entity(entity).insert((
-        Serializable::default()
-            .with::<Player>()
-            .with::<components::State>()
-            .with::<Transform>()
-            .with::<Velocity>()
-            .with::<Control>(),
-        Name::new("player"),
-        Collider::capsule_y(COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS),
-        RigidBody::Dynamic,
-        LockedAxes::ROTATION_LOCKED,
-        Friction {
-            coefficient: 0.0,
-            combine_rule: CoefficientCombineRule::Multiply,
-        },
-        ColliderMassProperties::Mass(65.0),
-        VolumeScale::new(0.15),
-    ));
+    commands
+        .entity(entity)
+        .insert((
+            Serializable::default()
+                .with::<Player>()
+                .with::<components::State>()
+                .with::<Transform>()
+                .with::<Velocity>()
+                .with::<Health>()
+                .with::<Control>(),
+            Health::new(100),
+            Name::new("player"),
+            Collider::capsule_y(COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS),
+            RigidBody::Dynamic,
+            LockedAxes::ROTATION_LOCKED,
+            Friction {
+                coefficient: 0.0,
+                combine_rule: CoefficientCombineRule::Multiply,
+            },
+            ColliderMassProperties::Mass(65.0),
+            VolumeScale::new(0.15),
+        ))
+        .observe(handle_death);
 
-    let head = Head::new(Vec3::Y * COLLIDER_HALF_HEIGHT)
-        .spawn(commands)
+    let head = commands
+        .spawn(Head::new(Vec3::Y * COLLIDER_HALF_HEIGHT).bundle())
         .set_parent(entity)
         .id();
 
-    PlayerCamera.spawn(commands).set_parent(head);
+    commands.spawn(PlayerCamera::bundle()).set_parent(head);
 
-    let ray_cast = RayCast::new(entity).spawn(commands).set_parent(head).id();
+    let ray_cast = commands
+        .spawn(RayCast::new(entity).bundle())
+        .set_parent(head)
+        .id();
 
-    let cast_up = ShapeCast::up(entity)
-        .spawn(commands)
+    let cast_up = commands
+        .spawn(ShapeCast::up(entity).bundle())
         .set_parent(entity)
         .id();
 
-    let cast_down = ShapeCast::down(entity)
-        .spawn(commands)
+    let cast_down = commands
+        .spawn(ShapeCast::down(entity).bundle())
         .set_parent(entity)
         .id();
 
@@ -109,24 +127,24 @@ fn spawn(mut world: DeferredWorld<'_>, entity: Entity, _: ComponentId) {
         .with_link("cast_down", cast_down),));
 }
 
-impl Spawnable for Player {
-    fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
-        commands.spawn(self.clone())
-    }
+fn handle_death(s: Trigger<DeadEvent>, mut commands: Commands) {
+    println!("{}", s.entity());
+
+    commands.trigger(PlayerDeadEvent);
 }
 
 pub struct PlayerCamera;
 
-impl Spawnable for PlayerCamera {
-    fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
-        commands.spawn((
+impl PlayerCamera {
+    pub fn bundle() -> impl Bundle {
+        (
             Name::new("camera"),
             Camera3d::default(),
             Projection::Perspective(PerspectiveProjection {
                 fov: consts::PI / 2.0,
                 ..default()
             }),
-        ))
+        )
     }
 }
 
@@ -138,14 +156,12 @@ impl RayCast {
     fn new(exclude: Entity) -> Self {
         Self { exclude }
     }
-}
 
-impl Spawnable for RayCast {
-    fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
-        commands.spawn((
+    fn bundle(self) -> impl Bundle {
+        (
             Name::new("ray_cast"),
             RayCaster::new(Vec3::NEG_Z * HAND_DISTANCE).exclude(self.exclude),
-        ))
+        )
     }
 }
 
@@ -171,11 +187,9 @@ impl<'s> ShapeCast<'s> {
             direction: Vec3::NEG_Y,
         }
     }
-}
 
-impl<'s> Spawnable for ShapeCast<'s> {
-    fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
-        commands.spawn((
+    pub fn bundle(self) -> impl Bundle {
+        (
             Name::new(self.name.to_owned()),
             ShapeCaster::new(
                 Collider::ball(COLLIDER_RADIUS - SKIN_WIDTH),
@@ -183,7 +197,7 @@ impl<'s> Spawnable for ShapeCast<'s> {
             )
             .fixed_update()
             .exclude(self.exclude),
-        ))
+        )
     }
 }
 
@@ -195,16 +209,14 @@ impl Head {
     fn new(position: Vec3) -> Self {
         Self { position }
     }
-}
 
-impl Spawnable for Head {
-    fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
-        commands.spawn((
+    pub fn bundle(self) -> impl Bundle {
+        (
             Name::new("head"),
             Transform {
                 translation: self.position,
                 ..default()
             },
-        ))
+        )
     }
 }

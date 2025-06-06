@@ -1,13 +1,13 @@
 use std::f32::consts;
 use std::time::Duration;
 
-use crate::control::{Control, ControlSystems, Input};
-use crate::despawn::Despawn;
-use crate::library::{move_toward, Spawnable};
-use crate::linker::Linker;
-use crate::liquid::{Floating, LiquidSystems};
-use crate::ray_caster::RayCasterSystems;
-use crate::shape_caster::{ShapeCaster, ShapeCasterSystems};
+use crate::library::move_toward;
+use crate::plugins::despawn::Despawn;
+use crate::plugins::input::{Control, Input, JumpingInvokedEvent};
+use crate::plugins::linker::Linker;
+use crate::plugins::liquid::Floating;
+use crate::plugins::shape_caster::ShapeCaster;
+use crate::stores::pause::PauseState;
 
 use bevy::animation::{animated_field, AnimationTargetId};
 use bevy_rapier3d::dynamics::Velocity;
@@ -31,13 +31,6 @@ const SKIN_WIDTH: f32 = 0.05;
 const COLLIDER_HALF_HEIGHT: f32 = 1.0 - COLLIDER_RADIUS;
 const COLLIDER_CROUCHING_HALF_HEIGHT: f32 = COLLIDER_HALF_HEIGHT * 0.4;
 
-#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone)]
-enum PlayerSystems {
-    Update,
-    Prepare,
-    FixedUpdate,
-}
-
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
@@ -46,32 +39,20 @@ impl Plugin for PlayerPlugin {
             .register_type::<components::State>()
             .add_systems(
                 PreUpdate,
-                (head, fireball)
-                    .in_set(PlayerSystems::Update)
-                    .after(ControlSystems)
-                    .before(RayCasterSystems),
+                (head, fireball).run_if(PauseState::is_not_paused),
             )
-            .configure_sets(
-                FixedPreUpdate,
-                (PlayerSystems::Prepare, PlayerSystems::FixedUpdate)
-                    .chain()
-                    .after(ShapeCasterSystems)
-                    .after(LiquidSystems::Update),
-            )
+            .add_systems(FixedFirst, ground_check.run_if(PauseState::is_not_paused))
             .add_systems(
                 FixedPreUpdate,
                 (
-                    ground_check.in_set(PlayerSystems::Prepare),
-                    (
-                        collider,
-                        moving,
-                        falling.run_if(|input: Res<Input>| input.moving.length() > 0.0),
-                        swimming,
-                        jumping,
-                    )
-                        .in_set(PlayerSystems::FixedUpdate),
-                ),
-            );
+                    collider,
+                    moving,
+                    falling.run_if(|input: Res<Input>| input.moving.length() > 0.0),
+                    swimming,
+                )
+                    .run_if(PauseState::is_not_paused),
+            )
+            .add_observer(jumping);
     }
 }
 
@@ -94,8 +75,8 @@ fn fireball(
 
         let position = transform.translation() + direction;
 
-        let fireball = Fireball
-            .spawn(&mut commands)
+        let fireball = commands
+            .spawn(Fireball)
             .insert((
                 Transform::from_translation(position),
                 Velocity::linear(direction * 50.0),
@@ -170,7 +151,7 @@ fn head(
     >,
     mut head_q: Query<&mut Transform, Without<Player>>,
 ) {
-    let looking = input.looking();
+    let looking = input.looking;
 
     for (mut transform, linker, mut state) in entity_q.iter_mut() {
         let mut head_transform = head_q.get_mut(*linker.get("head").unwrap()).unwrap();
@@ -445,10 +426,12 @@ fn falling(
 }
 
 fn jumping(
-    mut input: ResMut<Input>,
+    _: Trigger<JumpingInvokedEvent>,
+    pause_state: Res<PauseState>,
+    input: ResMut<Input>,
     mut entity_q: Query<(&mut Velocity, &Player, &components::State), With<Control>>,
 ) {
-    if !input.jumping() {
+    if *pause_state == PauseState::Pause {
         return;
     }
 

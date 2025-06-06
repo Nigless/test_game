@@ -6,7 +6,7 @@ use bevy::{
 };
 use bevy_rapier3d::prelude::RigidBody;
 
-use crate::{prefab::Prefab, saves::Serializable};
+use crate::plugins::{prefab::Prefab, serializable::Serializable};
 
 #[derive(Component, Reflect, Clone)]
 #[reflect(Component)]
@@ -18,7 +18,7 @@ pub fn create_test_scene() -> Scene {
     world.spawn((Prefab::new("test_scene/model.glb"), RigidBody::Fixed));
     world.spawn((
         Name::new("directional_light"),
-        Serializable::new("directional_light"),
+        Serializable::new("directional_light").with::<Transform>(),
         DirectionalLight {
             illuminance: 3000.0,
             shadows_enabled: true,

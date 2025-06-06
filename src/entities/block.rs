@@ -1,53 +1,50 @@
-use bevy::prelude::*;
+use bevy::{
+    ecs::{component::ComponentId, world::DeferredWorld},
+    prelude::*,
+};
 use bevy_rapier3d::prelude::*;
 
-use crate::{library::Spawnable, with_material::WithMaterial, with_mesh::WithMesh};
-
-#[derive(Bundle, Clone)]
-pub struct BlockBundle {
-    name: Name,
-    mesh: WithMesh,
-    material: WithMaterial,
-    collider: Collider,
-    body: RigidBody,
-    collider_mass_properties: ColliderMassProperties,
-    velocity: Velocity,
-    transform: Transform,
+#[derive(Resource, Clone)]
+struct BlockAssets {
+    mesh: Handle<Mesh>,
+    material: Handle<StandardMaterial>,
 }
 
-impl Default for BlockBundle {
-    fn default() -> Self {
-        Self {
-            name: Name::new("block"),
-            mesh: WithMesh::new(Cuboid::new(1.0, 1.0, 1.0)),
-            material: WithMaterial::new(Color::srgb_u8(255, 255, 255)),
-            collider: Collider::cuboid(0.5, 0.5, 0.5),
-            body: RigidBody::Dynamic,
-            collider_mass_properties: ColliderMassProperties::Mass(200.0),
-            velocity: Velocity::default(),
-            transform: Transform::default(),
-        }
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+#[component(on_add = resolve)]
+pub struct Block;
+
+pub struct BlockPlugin;
+
+impl Plugin for BlockPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(PreStartup, startup);
     }
 }
 
-impl BlockBundle {
-    pub fn new(hx: f32, hy: f32, hz: f32) -> Self {
-        Self {
-            name: Name::new("block"),
-            mesh: WithMesh::new(Cuboid::new(hx, hy, hz)),
-            collider: Collider::cuboid(hx / 2.0, hy / 2.0, hz / 2.0),
-            ..default()
-        }
-    }
-
-    pub fn with_mass(mut self, mass: f32) -> Self {
-        self.collider_mass_properties = ColliderMassProperties::Mass(mass);
-        self
-    }
+fn startup(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    commands.insert_resource(BlockAssets {
+        material: materials.add(Color::srgb_u8(255, 255, 255)),
+        mesh: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
+    });
 }
 
-impl Spawnable for BlockBundle {
-    fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
-        commands.spawn(self.clone())
-    }
+fn resolve(mut world: DeferredWorld<'_>, entity: Entity, _: ComponentId) {
+    let assets = world.get_resource::<BlockAssets>().cloned().unwrap();
+
+    world.commands().entity(entity).insert_if_new((
+        Name::new("block"),
+        Collider::cuboid(0.5, 0.5, 0.5),
+        RigidBody::Dynamic,
+        ColliderMassProperties::Mass(5.0),
+        Velocity::default(),
+        Transform::default(),
+        Mesh3d(assets.mesh),
+        MeshMaterial3d(assets.material),
+    ));
 }

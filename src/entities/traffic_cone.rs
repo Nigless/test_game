@@ -4,39 +4,36 @@ use bevy::{
     reflect::Reflect,
     transform::components::Transform,
 };
-use bevy_rapier3d::prelude::{ColliderMassProperties, RigidBody, Velocity};
+use bevy_rapier3d::prelude::{ColliderMassProperties, MassProperties, RigidBody, Velocity};
 
-use crate::{
-    library::Spawnable,
+use crate::plugins::{
     prefab::{Prefab, PrefabCollection},
-    saves::Serializable,
+    serializable::Serializable,
 };
 
 use bevy::{ecs::component::Component, prelude::*};
 
 #[derive(Component, Reflect, Clone)]
-#[require(Transform, Velocity)]
 #[component(on_add = spawn)]
 #[reflect(Component)]
 pub struct TrafficCone;
 
 fn spawn(mut world: DeferredWorld<'_>, entity: Entity, _: ComponentId) {
-    world.commands().entity(entity).insert_if_new((
-        Name::new("traffic_cone"),
-        Prefab::new("traffic_cone/model.glb"),
-        Serializable::default()
+    world
+        .commands()
+        .entity(entity)
+        .insert_if_new((
+            Name::new("traffic_cone"),
+            Prefab::new("traffic_cone/model.glb"),
+            RigidBody::Dynamic,
+            Transform::default(),
+            Velocity::default(),
+            ColliderMassProperties::Mass(3.0),
+        ))
+        .insert((Serializable::default()
             .with::<TrafficCone>()
             .with::<Transform>()
-            .with::<Velocity>(),
-        RigidBody::Dynamic,
-        ColliderMassProperties::Mass(3.0),
-    ));
-}
-
-impl Spawnable for TrafficCone {
-    fn spawn<'a>(&self, commands: &'a mut Commands) -> EntityCommands<'a> {
-        commands.spawn(self.clone())
-    }
+            .with::<Velocity>(),));
 }
 
 pub struct TrafficConePlugin;
