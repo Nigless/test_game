@@ -3,8 +3,9 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use bevy::{
     app::Plugin,
     ecs::{
-        component::{Component, ComponentHooks, StorageType},
+        component::{self, Component, ComponentHooks, ComponentId, StorageType},
         system::Resource,
+        world::DeferredWorld,
     },
     input::{keyboard::KeyCode, mouse::MouseMotion},
     math::Vec2,
@@ -12,31 +13,35 @@ use bevy::{
     state::commands,
 };
 use chrono::{DateTime, TimeDelta, Utc};
+use serde::de;
+
+use crate::plugins::timer::{Timer, TimerCollection, TimerElapsedEvent, TimerLink};
 
 use crate::stores::pause::PauseState;
 
-#[derive(Reflect, Clone, Debug)]
+#[derive(Reflect, Clone, Debug, Component)]
 #[reflect(Component)]
+#[component(on_add = resolve)]
 pub struct Despawn {
     recursive: bool,
-    timeout: Option<Duration>,
-    crated_at: Option<u128>,
+    duration: Option<Duration>,
+    timer: Option<TimerLink>,
 }
 
 impl Despawn {
     pub fn now() -> Self {
         Self {
             recursive: false,
-            timeout: None,
-            crated_at: None,
+            duration: None,
+            timer: None,
         }
     }
 
     pub fn after(duration: Duration) -> Self {
         Self {
             recursive: false,
-            timeout: Some(duration),
-            crated_at: None,
+            duration: Some(duration),
+            timer: None,
         }
     }
 
@@ -44,105 +49,64 @@ impl Despawn {
         self.recursive = true;
         self
     }
-
-    pub fn is_time_up(&self) -> bool {
-        let Some(crated_at) = self.crated_at else {
-            return true;
-        };
-
-        let Some(timeout) = self.timeout else {
-            return true;
-        };
-
-        let time_now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
-
-        time_now - crated_at > timeout.as_millis()
-    }
 }
 
-impl Component for Despawn {
-    const STORAGE_TYPE: StorageType = StorageType::Table;
+fn resolve(mut world: DeferredWorld<'_>, entity: Entity, _: ComponentId) {
+    let mut despawn = world.get_mut::<Despawn>(entity).unwrap();
 
-    fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_add(|mut world, entity, _| {
-            let despawn = world.get::<Despawn>(entity).cloned().unwrap();
+    let Some(duration) = despawn.duration.take() else {
+        if despawn.recursive {
+            world.commands().entity(entity).despawn_recursive();
+        }
 
-            if despawn.timeout.is_some() {
-                let mut despawn = world.get_mut::<Despawn>(entity).unwrap();
+        world.commands().entity(entity).despawn();
 
-                despawn.crated_at = Some(
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_millis(),
-                );
+        return;
+    };
 
-                return;
-            }
+    let mut timers = world.resource_mut::<TimerCollection>();
 
-            let mut w = world.commands();
-            let mut commands = w.entity(entity);
+    let handle = timers.add(Timer::new(duration).with_subscriber(entity));
 
-            if despawn.recursive {
-                commands.despawn_recursive();
-                return;
-            }
-            commands.despawn();
-        });
-    }
+    world.get_mut::<Despawn>(entity).unwrap().timer = Some(handle);
 }
 
 pub struct DespawnPlugin;
 
 impl Plugin for DespawnPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<Despawn>().add_systems(
-            First,
-            (
-                restore.run_if(resource_changed::<PauseState>),
-                update.run_if(PauseState::is_not_paused),
-            )
-                .chain(),
-        );
+        app.register_type::<Despawn>()
+            .add_observer(handle_timer_elapsed);
     }
 }
 
-fn restore(
-    mut pause_started: Local<u128>,
+fn handle_timer_elapsed(
+    trigger: Trigger<TimerElapsedEvent>,
     mut entity_q: Query<&mut Despawn>,
-    pause_state: Res<PauseState>,
+    mut commands: Commands,
+    mut timers: ResMut<TimerCollection>,
 ) {
-    let time_now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
+    let entity = trigger.entity();
 
-    if *pause_state == PauseState::Pause {
-        *pause_started = time_now;
+    let Ok(despawn) = entity_q.get_mut(entity) else {
+        return;
+    };
+
+    let Some(timer) = &despawn.timer else {
+        return;
+    };
+
+    if *timer != trigger.event().0 {
         return;
     }
 
-    for mut despawn in entity_q.iter_mut() {
-        despawn.crated_at = despawn
-            .crated_at
-            .map(|crated_at| crated_at + time_now - *pause_started);
+    timers.remove(timer);
+
+    if despawn.recursive {
+        commands.entity(entity).despawn_recursive();
+
+        return;
     }
-}
 
-fn update(mut commands: Commands, entity_q: Query<(Entity, &Despawn)>) {
-    for (entity, despawn) in entity_q.iter() {
-        if !despawn.is_time_up() {
-            continue;
-        }
-
-        if despawn.recursive {
-            commands.entity(entity).despawn_recursive();
-            continue;
-        }
-
-        commands.entity(entity).despawn();
-    }
+    commands.entity(entity).despawn();
 }

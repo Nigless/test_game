@@ -79,6 +79,7 @@ fn update<T: Component>(
     rapier: Single<&RapierContext>,
     mut entity_q: Query<(&mut RayCaster, &GlobalTransform), (Without<RapierContext>, With<T>)>,
     settings: Res<Settings>,
+    commands: Commands,
 ) {
     let mut filter = QueryFilter::default().exclude_sensors();
 

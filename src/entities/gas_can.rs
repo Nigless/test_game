@@ -35,14 +35,30 @@ fn spawn(mut world: DeferredWorld<'_>, entity: Entity, _: ComponentId) {
                 .with::<GasCan>()
                 .with::<Transform>()
                 .with::<Velocity>(),
-        ))
-        .observe(handle_death);
+        ));
+}
+
+pub struct GasCanPlugin;
+
+impl Plugin for GasCanPlugin {
+    fn build(&self, app: &mut App) {
+        app.register_type::<GasCan>()
+            .add_systems(PreStartup, startup)
+            .add_observer(handle_death);
+    }
+}
+
+fn startup(mut prefabs: ResMut<PrefabCollection>, server: Res<AssetServer>) {
+    prefabs.insert(
+        "gas_can/model.glb",
+        server.load(GltfAssetLabel::Scene(0).from_asset("gas_can/model.glb")),
+    );
 }
 
 fn handle_death(
     trigger: Trigger<DeadEvent>,
     mut commands: Commands,
-    entity_q: Query<(&Transform, Option<&Parent>)>,
+    entity_q: Query<(&Transform, Option<&Parent>), With<GasCan>>,
 ) {
     let entity = trigger.entity();
 
@@ -59,20 +75,4 @@ fn handle_death(
     if let Some(parent) = parent {
         commands.entity(explosion).set_parent(parent.get());
     }
-}
-
-pub struct GasCanPlugin;
-
-impl Plugin for GasCanPlugin {
-    fn build(&self, app: &mut App) {
-        app.register_type::<GasCan>()
-            .add_systems(PreStartup, startup);
-    }
-}
-
-fn startup(mut prefabs: ResMut<PrefabCollection>, server: Res<AssetServer>) {
-    prefabs.insert(
-        "gas_can/model.glb",
-        server.load(GltfAssetLabel::Scene(0).from_asset("gas_can/model.glb")),
-    );
 }

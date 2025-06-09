@@ -11,7 +11,7 @@ use std::{
 
 use bevy::{
     app::{App, Plugin},
-    ecs::{component::Component, system::Query},
+    ecs::{component::Component, reflect, system::Query},
     log::tracing_subscriber::fmt::MakeWriter,
     prelude::*,
     reflect::{serde::TypedReflectSerializer, TypeRegistry},
@@ -20,8 +20,12 @@ use serde_json::{json, Map};
 use serde_json::{Deserializer, Value};
 use uuid::Uuid;
 
-use crate::plugins::prefab::{
-    self, insert_reflect, parse_component, spawn_prefab_recursive, Prefab, PrefabCollection,
+use crate::plugins::{
+    input::{LoadingPressedEvent, SavingPressedEvent},
+    prefab::{
+        self, insert_reflect, parse_component, spawn_prefab_recursive, Prefab, PrefabCollection,
+    },
+    scene_controller::SceneController,
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
 
@@ -36,7 +40,7 @@ use bevy::{
 };
 use bevy_rapier3d::{
     geometry::{Collider, ComputedColliderShape},
-    prelude::{TriMeshFlags, VHACDParameters},
+    prelude::{AsyncSceneCollider, TriMeshFlags, VHACDParameters},
 };
 use serde::{de::DeserializeSeed, Deserialize, Serialize};
 
@@ -78,13 +82,29 @@ impl Serializable {
     }
 }
 
+#[derive(Resource, Default, Reflect)]
+#[reflect(Resource)]
+pub struct SerializableResources {
+    component_types: Vec<TypeId>,
+}
+
+impl SerializableResources {
+    pub fn with<T: ?Sized + 'static + Reflect + Resource>(mut self) -> Self {
+        self.component_types.push(TypeId::of::<T>());
+        self
+    }
+}
+
 pub struct SerializablePlugin;
 
 impl Plugin for SerializablePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(First, (save, load).chain())
+        app.add_observer(save)
+            .add_observer(load)
             .add_systems(First, startup)
-            .register_type::<Serializable>();
+            .register_type::<Serializable>()
+            .register_type::<SerializableResources>()
+            .init_resource::<SerializableResources>();
     }
 }
 
@@ -99,15 +119,11 @@ fn startup() {
 }
 
 fn save(
+    _: Trigger<SavingPressedEvent>,
     world: &World,
     entity_q: Query<(Entity, &Serializable)>,
     types_res: Res<AppTypeRegistry>,
-    keyboard: Res<ButtonInput<KeyCode>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::F5) {
-        return;
-    }
-
     let types = types_res.read();
 
     let mut save_file = SaveFile::new();
@@ -279,11 +295,7 @@ impl SaveFile {
     }
 }
 
-fn load(keyboard: Res<ButtonInput<KeyCode>>, mut commands: Commands) {
-    if !keyboard.just_pressed(KeyCode::F6) {
-        return;
-    }
-
+fn load(_: Trigger<LoadingPressedEvent>, mut commands: Commands) {
     let mut files = Vec::<SaveFile>::new();
 
     for entry in fs::read_dir("saves").unwrap() {
@@ -315,6 +327,10 @@ fn load(keyboard: Res<ButtonInput<KeyCode>>, mut commands: Commands) {
     }
 
     commands.queue(|world: &mut World| {
-        load_file(world, last_save);
+        let scene = load_file(world, last_save);
+
+        if let Some(mut controller) = world.get_resource_mut::<SceneController>() {
+            controller.push(scene);
+        }
     });
 }

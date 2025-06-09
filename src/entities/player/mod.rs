@@ -3,10 +3,12 @@ use std::time::Duration;
 
 use crate::library::move_toward;
 use crate::plugins::despawn::Despawn;
-use crate::plugins::input::{Control, Input, JumpingInvokedEvent};
+use crate::plugins::health::DeadEvent;
+use crate::plugins::input::{Control, Input, JumpingPressedEvent};
 use crate::plugins::linker::Linker;
 use crate::plugins::liquid::Floating;
 use crate::plugins::shape_caster::ShapeCaster;
+use crate::stores::game::PlayerDeadEvent;
 use crate::stores::pause::PauseState;
 
 use bevy::animation::{animated_field, AnimationTargetId};
@@ -52,14 +54,23 @@ impl Plugin for PlayerPlugin {
                 )
                     .run_if(PauseState::is_not_paused),
             )
-            .add_observer(jumping);
+            .add_observer(jumping)
+            .add_observer(handle_death);
     }
+}
+
+fn handle_death(trigger: Trigger<DeadEvent>, entity_q: Query<&Player>, mut commands: Commands) {
+    if !entity_q.contains(trigger.entity()) {
+        return;
+    }
+
+    commands.trigger(PlayerDeadEvent);
 }
 
 fn fireball(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
-    entity_q: Query<(Option<&Parent>, &Linker), With<components::State>>,
+    entity_q: Query<(Option<&Parent>, &Linker), With<Player>>,
     camera_q: Query<&GlobalTransform>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyE) {
@@ -426,7 +437,7 @@ fn falling(
 }
 
 fn jumping(
-    _: Trigger<JumpingInvokedEvent>,
+    _: Trigger<JumpingPressedEvent>,
     pause_state: Res<PauseState>,
     input: ResMut<Input>,
     mut entity_q: Query<(&mut Velocity, &Player, &components::State), With<Control>>,

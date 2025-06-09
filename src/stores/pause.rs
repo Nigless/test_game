@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::plugins::{input::PausingInvokedEvent, prefab::PrefabsLoadedEvent};
+use crate::plugins::{input::PausingPressedEvent, prefab::PrefabsLoadedEvent};
 
 #[derive(Resource, Default, PartialEq)]
 pub enum PauseState {
@@ -29,7 +29,7 @@ impl Plugin for PauseStorePlugin {
     }
 }
 
-fn handle_pause(_: Trigger<PausingInvokedEvent>, mut state: ResMut<PauseState>) {
+fn handle_pause(_: Trigger<PausingPressedEvent>, mut state: ResMut<PauseState>) {
     *state = match *state {
         PauseState::Pause => PauseState::Playing,
         PauseState::Playing => PauseState::Pause,

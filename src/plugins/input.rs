@@ -12,19 +12,19 @@ use bevy::{
 use crate::plugins::settings::Settings;
 
 #[derive(Event)]
-pub struct JumpingInvokedEvent;
+pub struct JumpingPressedEvent;
 
 #[derive(Event)]
-pub struct FullScreenSwitchingInvokedEvent;
+pub struct FullScreenSwitchingPressedEvent;
 
 #[derive(Event)]
-pub struct PausingInvokedEvent;
+pub struct PausingPressedEvent;
 
 #[derive(Event)]
-pub struct SavingInvokedEvent;
+pub struct SavingPressedEvent;
 
 #[derive(Event)]
-pub struct LoadingInvokedEvent;
+pub struct LoadingPressedEvent;
 
 #[derive(Component, Reflect)]
 #[reflect(Component)]
@@ -134,22 +134,22 @@ fn update(
     input.swimming_down = keyboard.pressed(bindings.get("swim_down"));
 
     if keyboard.just_pressed(bindings.get("jump")) {
-        commands.trigger(JumpingInvokedEvent);
+        commands.trigger(JumpingPressedEvent);
     }
 
     if keyboard.just_pressed(bindings.get("switch_full_screen")) {
-        commands.trigger(FullScreenSwitchingInvokedEvent);
+        commands.trigger(FullScreenSwitchingPressedEvent);
     }
 
     if keyboard.just_pressed(bindings.get("save")) {
-        commands.trigger(SavingInvokedEvent);
+        commands.trigger(SavingPressedEvent);
     }
 
     if keyboard.just_pressed(bindings.get("load")) {
-        commands.trigger(LoadingInvokedEvent);
+        commands.trigger(LoadingPressedEvent);
     }
 
     if keyboard.just_pressed(bindings.get("pause")) {
-        commands.trigger(PausingInvokedEvent);
+        commands.trigger(PausingPressedEvent);
     }
 }

@@ -44,7 +44,7 @@ pub struct ExplosionHits {
 pub struct Explosion {
     pub radius: f32,
     pub samples: usize,
-    pub power: f32,
+    pub force: f32,
     pub damage: u16,
 }
 
@@ -95,8 +95,8 @@ impl Explosion {
         Self {
             radius,
             samples,
-            power: radius * 100.0,
-            damage: 50,
+            force: radius * 100.0,
+            damage: 10,
         }
     }
 }
@@ -199,7 +199,7 @@ fn explode(
                     body,
                     impulse
                         + ExternalImpulse::at_point(
-                            direction.normalize() * explosion.power,
+                            direction.normalize() * explosion.force,
                             intersection.point,
                             transform.translation() + center_of_mass,
                         ),
@@ -209,7 +209,7 @@ fn explode(
             }
 
             impulse += ExternalImpulse::at_point(
-                direction * (explosion.power / explosion.samples as f32),
+                direction * (explosion.force / explosion.samples as f32),
                 intersection.point,
                 transform.translation() + center_of_mass,
             );

@@ -13,6 +13,7 @@ pub mod serializable;
 pub mod settings;
 pub mod shape_caster;
 pub mod throttle;
+pub mod timer;
 
 pub use billboard::BillboardPlugin;
 pub use collision_events::CollisionEventsPlugins;
@@ -29,3 +30,4 @@ pub use serializable::SerializablePlugin;
 pub use settings::SettingsPlugin;
 pub use shape_caster::ShapeCasterPlugin;
 pub use throttle::ThrottlePlugin;
+pub use timer::TimerPlugin;

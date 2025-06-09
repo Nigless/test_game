@@ -1,4 +1,4 @@
-use std::{any::TypeId, f32::consts};
+use std::{any::TypeId, f32::consts, time::Duration};
 
 use bevy::{
     audio::Volume,
@@ -74,29 +74,26 @@ impl Default for Player {
 fn spawn(mut world: DeferredWorld<'_>, entity: Entity, _: ComponentId) {
     let commands = &mut world.commands();
 
-    commands
-        .entity(entity)
-        .insert((
-            Serializable::default()
-                .with::<Player>()
-                .with::<components::State>()
-                .with::<Transform>()
-                .with::<Velocity>()
-                .with::<Health>()
-                .with::<Control>(),
-            Health::new(100),
-            Name::new("player"),
-            Collider::capsule_y(COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS),
-            RigidBody::Dynamic,
-            LockedAxes::ROTATION_LOCKED,
-            Friction {
-                coefficient: 0.0,
-                combine_rule: CoefficientCombineRule::Multiply,
-            },
-            ColliderMassProperties::Mass(65.0),
-            VolumeScale::new(0.15),
-        ))
-        .observe(handle_death);
+    commands.entity(entity).insert((
+        Serializable::default()
+            .with::<Player>()
+            .with::<components::State>()
+            .with::<Transform>()
+            .with::<Velocity>()
+            .with::<Health>()
+            .with::<Control>(),
+        Health::new(100).regenerate(Duration::from_millis(1000)),
+        Name::new("player"),
+        Collider::capsule_y(COLLIDER_HALF_HEIGHT, COLLIDER_RADIUS),
+        RigidBody::Dynamic,
+        LockedAxes::ROTATION_LOCKED,
+        Friction {
+            coefficient: 0.0,
+            combine_rule: CoefficientCombineRule::Multiply,
+        },
+        ColliderMassProperties::Mass(65.0),
+        VolumeScale::new(0.15),
+    ));
 
     let head = commands
         .spawn(Head::new(Vec3::Y * COLLIDER_HALF_HEIGHT).bundle())
@@ -125,12 +122,6 @@ fn spawn(mut world: DeferredWorld<'_>, entity: Entity, _: ComponentId) {
         .with_link("ray_cast", ray_cast)
         .with_link("cast_up", cast_up)
         .with_link("cast_down", cast_down),));
-}
-
-fn handle_death(s: Trigger<DeadEvent>, mut commands: Commands) {
-    println!("{}", s.entity());
-
-    commands.trigger(PlayerDeadEvent);
 }
 
 pub struct PlayerCamera;

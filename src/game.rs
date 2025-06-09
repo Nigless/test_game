@@ -17,7 +17,7 @@ use crate::{
         traffic_cone::TrafficCone, EntitiesPlugin,
     },
     plugins::{
-        input::{Control, FullScreenSwitchingInvokedEvent, Input},
+        input::{Control, FullScreenSwitchingPressedEvent, Input},
         prefab::{Prefab, PrefabsLoadedEvent},
         serializable::Serializable,
         settings::Settings,
@@ -63,6 +63,7 @@ pub fn game() -> App {
             StoresPlugin,
             ScenesPlugin,
             SettingsPlugin,
+            TimerPlugin,
         ))
         .add_plugins((SerializablePlugin, PrefabPlugin))
         .add_systems(
@@ -90,7 +91,7 @@ fn switch_colliders_debug(settings: Res<Settings>, mut rapier_debug: ResMut<Debu
 }
 
 fn handle_full_screen_switch(
-    _: Trigger<FullScreenSwitchingInvokedEvent>,
+    _: Trigger<FullScreenSwitchingPressedEvent>,
     mut window: Single<&mut Window>,
 ) {
     if let WindowMode::BorderlessFullscreen(_) = window.mode {
